@@ -1,1 +1,59 @@
-from numpy import *
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.graph_objects as go
+from cylp.py.modeling.CyLPModel import CyLPModel, CyLPArray
+from cylp.cy import CyClpSimplex
+
+sites = pd.read_csv("Sites.csv")
+
+N_pays = 15
+N_sites = 642
+N_heures_par_annee = 24*365
+N_annees = 1/12
+N_heures = int(np.ceil(N_heures_par_annee*N_annees))
+vecteur_temps = np.arange(1,N_heures+1)/N_heures_par_annee
+
+P_tot = 500000
+kappa = 0.17
+delta = 0.02
+T = 3
+N_periode_de_duree_T = int(np.ceil(N_heures_par_annee/T-1))
+
+onshore = sites[sites["capacite offshore"]=="Non"].copy()
+offshore = sites[sites["capacite offshore"]=="Oui"].copy()
+P_max = sites["capacites"]
+sites2 = np.array(sites.copy())
+
+for i in range(len(sites2)): #contrainte offshore / oneshore
+    if(sites2[i][5] == "Non"):
+        sites2[i][7] = 0
+prod_offshore = np.zeros(642)
+for i in range(642):
+    prod_offshore = sites2[i][7]
+    
+matrice_rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
+matrice_rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
+
+print(matrice_rendements_onshore)
+
+ones = np.ones(N_heures, dtype=int)
+
+c1 = matrice_rendements_onshore.dot(ones)
+c2 = matrice_rendements_offshore.dot(ones)
+
+np.append(c1,c2)
+
+program = CyLPModel()
+
+P = program.addVariable('P',N_sites)
+#y = program.addVariable('y',N_periode_de_duree_T)
+
+#c = CyLPArray(np.zeros(N_sites+N_periode_de_duree_T))
+
+program.addConstraint(0 <= P <= P_max,"Contrainte 1")
+program.addConstraint(P.sum() == P_tot,"Contrainte 2")
+program.addConstraint(P*prod_offshore == (0.17*500000))
+
+#variance
+program.objective()
