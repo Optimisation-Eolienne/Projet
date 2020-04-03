@@ -6,13 +6,6 @@ from cylp.cy import CyClpSimplex
 from cylp.py.modeling.CyLPModel import CyLPArray
 
 
-#| Chargement des donnees
-
-sites = pd.read_csv("Sites.csv")
-rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
-rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
-
-
 #| Parametres
 
 N_pays = 15
@@ -26,6 +19,13 @@ kappa = 0.17
 delta = 0.02
 T = 3
 N_periode_de_duree_T = int(np.ceil(N_heures/T-1))
+
+#| Chargement des donnees
+
+sites = pd.read_csv("Sites.csv")
+rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
+rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
+
 P_max = CyLPArray(sites["capacites"])
 
 
@@ -51,14 +51,12 @@ def model_1():
     P = program.addVariable('P',N_sites)
     
     #Contraintes
-    program.addConstraint(P <= P_tot,"Bornes sur les puissances installees")
+    program.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installees")
     program.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
-    program.addConstraint(P * is_offshore == kappa * P_tot,"Contrainte offshore")
-    
-
+    program.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     
     #Objectif        
-    program.objective = - c * P
+    program.objectiveCoefficients = -c
     
     #Solution
     program.primal()
