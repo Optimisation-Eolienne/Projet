@@ -17,7 +17,7 @@ N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 P_tot = 500000
 kappa = 0.17
 delta = 0.02
-T = 3
+T = 9
 N_periode = int(np.ceil(N_heures/T-1))
 
 
@@ -45,7 +45,7 @@ for i in range(N_sites):
 
 def model_1():
     
-    c = CyLPArray(np.zeros(N_sites,dtype=int))
+    c = CyLPArray(np.zeros(N_sites))
     for i in range(N_sites):
         c[i] = np.sum(rendements[i,:])
     
@@ -53,7 +53,6 @@ def model_1():
     for i in range(N_periode):
         for j in range(N_sites):
             A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
-    
     
     simplex = CyClpSimplex()
     
@@ -68,10 +67,10 @@ def model_1():
     
     simplex.addConstraint(y.sum() <= N_periode*delta*P_tot*T,"Contrainte variance 1")
     simplex.addConstraint(A * P - y <= 0,"Contrainte variance 2")
-    simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")    
+    simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")  
     
     #Objectif        
-    simplex.objectiveCoefficients = -c
+    simplex.objective = -c * P
     
     #Solution
     simplex.primal()
