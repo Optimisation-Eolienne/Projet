@@ -17,7 +17,7 @@ N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 P_tot = 500000
 kappa = 0.17
 delta = 0.02
-T = 9
+T = 3
 N_periode = int(np.ceil(N_heures/T-1))
 
 
