@@ -17,7 +17,7 @@ N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 P_tot = 500000
 kappa = 0.17
 delta = 0.02
-T = 3
+T = 13
 N_periode = int(np.ceil(N_heures/T-1))
 
 
@@ -67,18 +67,38 @@ def model_1():
     
     simplex.addConstraint(y.sum() <= N_periode*delta*P_tot*T,"Contrainte variance 1")
     simplex.addConstraint(A * P - y <= 0,"Contrainte variance 2")
-    simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")  
+    simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")
     
-    #Objectif        
+    #Objectif
     simplex.objective = -c * P
     
     #Solution
     simplex.primal()
     
     return simplex.primalVariableSolution['P']
+
+def plot(P):
     
+    t = np.linspace(1,N_heures,N_heures)
+    
+    E = (P.T).dot(rendements)         
+    fig = plt.figure(figsize=(6,9))
+    graphe = fig.add_subplot(1,1,1)
+    
+    
+    graphe.plot(t,E)
+    plt.show()
+    
+    result = 0; count = 0
+    for i in range(N_sites):
+        if np.around(P[i])!=0:
+            result += np.sum(rendements[:,i])
+            count += 1
+    print(result/(N_heures*count))
+    
+    print(np.sum(E))
 
 def main():
-    print(model_1())
+    plot(model_1())
     
 main()
