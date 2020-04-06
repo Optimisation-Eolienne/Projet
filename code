@@ -17,7 +17,7 @@ N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 P_tot = 500000
 kappa = 0.17
 delta = 0.02
-T = 13
+T = 3
 N_periode = int(np.ceil(N_heures/T-1))
 
 
@@ -73,32 +73,57 @@ def model_1():
     simplex.objective = -c * P
     
     #Solution
-    simplex.primal()
+    status = simplex.primal()
+    print(status)
     
-    return simplex.primalVariableSolution['P']
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
 
-def plot(P):
+def plotModel_1_Energie(t,P,E):
     
-    t = np.linspace(1,N_heures,N_heures)
+    E_tot = np.transpose(P)@rendements
+    P_offshore = np.zeros(N_sites)
+    for i in range(N_sites):
+        if is_offshore[i]:
+            P_offshore[i] = P[i]
+    E_offshore = np.transpose(P_offshore)@rendements
+    E_onshore = E_tot - E_offshore
+    proportion_offshore = np.sum(E_offshore)/E
+    proportion_onshore = 1 - proportion_offshore
     
-    E = (P.T).dot(rendements)         
-    fig = plt.figure(figsize=(6,9))
-    graphe = fig.add_subplot(1,1,1)
+    fig = plt.figure(figsize=(12,9))
+    plt.subplots_adjust(hspace=0.5)
+    g1 = fig.add_subplot(3,1,1)
+    g2 = fig.add_subplot(3,1,2)
+    g3 = fig.add_subplot(3,1,3)
     
+    g1.set_title("Production d'énerge totale")
+    g1.set_xlabel("Temps (en année)")
+    g1.set_ylabel("Energie (en MWh)")
+    g1.set_ylim(100000,500000)
+    g1.plot(t,E_tot)
     
-    graphe.plot(t,E)
+    g2.set_title("Production d'énergie onshore")
+    g2.set_xlabel("Temps (en année)")
+    g2.set_ylabel("Energie (en MWh)")
+    g2.set_ylim(100000,500000)
+    g2.plot(t,E_onshore)
+    
+    g3.set_title("Production d'énergie offshore")
+    g3.set_xlabel("Temps (en année)")
+    g3.set_ylabel("Energie (en MWh)")
+    g3.set_ylim(0,200000)
+    g3.plot(t,E_offshore)
+    
+    plt.subplots_adjust(hspace=0.5)
     plt.show()
     
-    result = 0; count = 0
-    for i in range(N_sites):
-        if np.around(P[i])!=0:
-            result += np.sum(rendements[:,i])
-            count += 1
-    print(result/(N_heures*count))
-    
-    print(np.sum(E))
+    print("Energie totale produite : {:.0f} [MWh]".format(E))
+    print("avec une proportion de {:.2f}% d'énergie onshore et {:.2f}% d'énergie offshore" \
+          .format(100*proportion_onshore,100*proportion_offshore))
 
 def main():
-    plot(model_1())
+    result = model_1()
+    t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
+    plotModel_1_Energie(t,result[0],result[1])
     
 main()
