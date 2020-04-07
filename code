@@ -18,7 +18,7 @@ P_tot = 500000
 kappa = 0.17
 delta = 0.02
 T = 3
-N_periode = int(np.ceil(N_heures/T-1))
+N_periodes = int(np.ceil(N_heures/T))
 
 
 #| Chargement des donnees
@@ -49,8 +49,8 @@ def model_1():
     for i in range(N_sites):
         c[i] = np.sum(rendements[i,:])
     
-    A =  np.matrix(np.zeros((N_periode,N_sites)))
-    for i in range(N_periode):
+    A =  np.matrix(np.zeros((N_periodes-1,N_sites)))
+    for i in range(N_periodes-1):
         for j in range(N_sites):
             A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
     
@@ -58,14 +58,14 @@ def model_1():
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    y = simplex.addVariable('y',N_periode)
+    y = simplex.addVariable('y',N_periodes-1)
     
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installees")
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     
-    simplex.addConstraint(y.sum() <= N_periode*delta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(y.sum() <= (N_periodes-1)*delta*P_tot*T,"Contrainte variance 1")
     simplex.addConstraint(A * P - y <= 0,"Contrainte variance 2")
     simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")
     
@@ -73,8 +73,8 @@ def model_1():
     simplex.objective = -c * P
     
     #Solution
-    status = simplex.primal()
-    print(status)
+    simplex.primal()
+    print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
 
@@ -90,28 +90,25 @@ def plotModel_1_Energie(t,P,E):
     proportion_offshore = np.sum(E_offshore)/E
     proportion_onshore = 1 - proportion_offshore
     
-    fig = plt.figure(figsize=(12,9))
+    fig = plt.figure(figsize=(16,9))
     plt.subplots_adjust(hspace=0.5)
     g1 = fig.add_subplot(3,1,1)
     g2 = fig.add_subplot(3,1,2)
     g3 = fig.add_subplot(3,1,3)
     
     g1.set_title("Production d'énerge totale")
-    g1.set_xlabel("Temps (en année)")
-    g1.set_ylabel("Energie (en MWh)")
-    g1.set_ylim(100000,500000)
+    g1.set_xlabel("Temps [année]")
+    g1.set_ylabel("Energie [MWh]")
     g1.plot(t,E_tot)
     
     g2.set_title("Production d'énergie onshore")
-    g2.set_xlabel("Temps (en année)")
-    g2.set_ylabel("Energie (en MWh)")
-    g2.set_ylim(100000,500000)
+    g2.set_xlabel("Temps [année]")
+    g2.set_ylabel("Energie [MWh]")
     g2.plot(t,E_onshore)
     
     g3.set_title("Production d'énergie offshore")
-    g3.set_xlabel("Temps (en année)")
-    g3.set_ylabel("Energie (en MWh)")
-    g3.set_ylim(0,200000)
+    g3.set_xlabel("Temps [année]")
+    g3.set_ylabel("Energie [MWh]")
     g3.plot(t,E_offshore)
     
     plt.subplots_adjust(hspace=0.5)
@@ -120,10 +117,36 @@ def plotModel_1_Energie(t,P,E):
     print("Energie totale produite : {:.0f} [MWh]".format(E))
     print("avec une proportion de {:.2f}% d'énergie onshore et {:.2f}% d'énergie offshore" \
           .format(100*proportion_onshore,100*proportion_offshore))
+    
+def plotModel_1_Rendements(t,P):
+    N_installations = 0
+    rendement_total = np.zeros(N_heures)
+    
+    for i in range(N_sites):
+        if np.around(P[i],3)!=0:
+            N_installations += 1
+            rendement_total += rendements[i,:N_heures]
+    
+    rendement_total = rendement_total/N_installations
+    rendement_moyen = np.sum(rendement_total)/N_heures
+    
+    fig = plt.figure(figsize=(16,3))
+    plt.subplots_adjust(hspace=0.5)
+    g1 = fig.add_subplot()
+    
+    g1.set_title("Evolution du rendement")
+    g1.set_xlabel("Temps [année]")
+    g1.set_ylabel("Rendement [/]")
+    g1.plot(t,rendement_total)
+    
+    plt.show()
+    
+    print("Le rendement moyen est de {:.2f} [/]".format(rendement_moyen))
 
 def main():
     result = model_1()
     t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
     plotModel_1_Energie(t,result[0],result[1])
+    plotModel_1_Rendements(t,result[0])
     
 main()
