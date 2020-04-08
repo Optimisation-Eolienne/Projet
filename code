@@ -61,7 +61,8 @@ def model_1():
     y = simplex.addVariable('y',N_periodes-1)
     
     #Contraintes
-    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installees")
+    
+    simplex.addConstraint(0 <= P <= P_max,"Bornes")
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     
@@ -143,10 +144,29 @@ def plotModel_1_Rendements(t,P):
     
     print("Le rendement moyen est de {:.2f} [/]".format(rendement_moyen))
 
+def mapModel_1(P):
+    fig = go.Figure(data=go.Scattergeo(
+            lon = sites["longitude"],
+            lat = sites["latitude"],
+            hovertext = sites["pays"],
+            marker = dict(
+                color = sites["couleur"],
+                symbol = "circle",
+                size = np.around(P)/300)
+            ))
+    fig.update_layout(
+            title = "Repartion des puissances installées",
+            geo_scope = "europe"
+        )
+    
+    fig.show()
+    
+
 def main():
     result = model_1()
     t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
     plotModel_1_Energie(t,result[0],result[1])
     plotModel_1_Rendements(t,result[0])
+    mapModel_1(result[0])
     
 main()
