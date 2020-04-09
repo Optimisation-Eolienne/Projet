@@ -18,12 +18,12 @@ P_tot = 500000
 kappa = 0.17
 delta = 0.02
 T = 3
-N_periodes = int(np.ceil(N_heures/T))
+N_periodes = int(np.floor(N_heures/T))
 
 
 #| Chargement des donnees
 
-sites = pd.read_csv("Sites.csv")
+sites = pd.read_csv("Sites.csv",index_col="index site").sort_index()
 rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
 rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
 
@@ -36,9 +36,9 @@ is_offshore = CyLPArray(is_offshore)
 rendements = np.zeros((N_sites,N_heures))
 for i in range(N_sites):
     if is_offshore[i]:
-        rendements[i,:] = rendements_offshore[i,:]
+        rendements[i,:] = rendements_offshore[i,:N_heures]
     else:
-        rendements[i,:] = rendements_onshore[i,:]
+        rendements[i,:] = rendements_onshore[i,:N_heures]
 
 
 #| Resolution des problemes
@@ -62,7 +62,7 @@ def model_1():
     
     #Contraintes
     
-    simplex.addConstraint(0 <= P <= P_max,"Bornes")
+    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes")
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     
