@@ -27,11 +27,12 @@ sites = pd.read_csv("Sites.csv",index_col="index site").sort_index()
 rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
 rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
 
-P_max = CyLPArray(sites["capacites"])
+#| Matrice et vecteurs principaux utilisés dans les problèmes 
 
 is_offshore = pd.Series(0,index=range(N_sites))
 is_offshore[sites["capacite offshore"]=="Oui"] = 1
 is_offshore = CyLPArray(is_offshore)
+
 
 rendements = np.zeros((N_sites,N_heures))
 for i in range(N_sites):
@@ -40,35 +41,34 @@ for i in range(N_sites):
     else:
         rendements[i,:] = rendements_onshore[i,:N_heures]
 
+c = CyLPArray(np.zeros(N_sites))
+for i in range(N_sites):
+    c[i] = np.sum(rendements[i,:])
+    
+P_max = CyLPArray(sites["capacites"])
+
+A =  np.matrix(np.zeros((N_periodes-1,N_sites)))
+for i in range(N_periodes-1):
+    for j in range(N_sites):
+        A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
 
 #| Resolution des problemes
 
 def model_1():
     
-    c = CyLPArray(np.zeros(N_sites))
-    for i in range(N_sites):
-        c[i] = np.sum(rendements[i,:])
-    
-    A =  np.matrix(np.zeros((N_periodes-1,N_sites)))
-    for i in range(N_periodes-1):
-        for j in range(N_sites):
-            A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
-    
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    y = simplex.addVariable('y',N_periodes-1)
+    v = simplex.addVariable('v',N_periodes-1)
     
     #Contraintes
-    
-    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes")
+    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
-    
-    simplex.addConstraint(y.sum() <= (N_periodes-1)*delta*P_tot*T,"Contrainte variance 1")
-    simplex.addConstraint(A * P - y <= 0,"Contrainte variance 2")
-    simplex.addConstraint(-A * P - y <= 0,"Contrainte variance 3")
+    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
     
     #Objectif
     simplex.objective = -c * P
@@ -79,7 +79,90 @@ def model_1():
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
 
-def plotModel_1_Energie(t,P,E):
+def model_2():
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    v = simplex.addVariable('v',N_periodes-1)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(P.sum() <= P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
+    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
+    
+    #Objectif
+    simplex.objective = -c * P
+    
+    #Solution
+    simplex.primal()
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+
+def model_3():
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
+    simplex.addConstraint(A * P <= delta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(A * P <= delta*P_tot*T,"Contrainte variance 2")
+    
+    #Objectif
+    simplex.objective = -c * P
+    
+    #Solution
+    simplex.primal()
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    
+def model_4():
+    
+    N_sites = 5
+    N_heures = 24
+    
+    r = np.hstack((np.ones(T),-np.ones(T)))
+    M = np.zeros((N_periodes-1,N_heures*N_sites))
+    for i in range(N_periodes-1):
+        for j in range(0,N_sites*N_heures,N_heures):
+            M[i,i*T:(i+2)*T] = r
+    
+    print(M)
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    v = simplex.addVariable('v',N_periodes-1)
+    u = simplex.addVariable('u',N_heures*N_sites)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
+    
+    #Objectif
+    simplex.objective = -c * P
+    
+    #Solution
+    simplex.primal()
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    
+
+def plotModel_Energie(t,P,E):
     
     E_tot = np.transpose(P)@rendements
     P_offshore = np.zeros(N_sites)
@@ -119,7 +202,7 @@ def plotModel_1_Energie(t,P,E):
     print("avec une proportion de {:.2f}% d'énergie onshore et {:.2f}% d'énergie offshore" \
           .format(100*proportion_onshore,100*proportion_offshore))
     
-def plotModel_1_Rendements(t,P):
+def plotModel_Rendements(t,P):
     N_installations = 0
     rendement_total = np.zeros(N_heures)
     
@@ -144,7 +227,7 @@ def plotModel_1_Rendements(t,P):
     
     print("Le rendement moyen est de {:.2f} [/]".format(rendement_moyen))
 
-def mapModel_1(P):
+def mapModel(P):
     fig = go.Figure(data=go.Scattergeo(
             lon = sites["longitude"],
             lat = sites["latitude"],
@@ -165,8 +248,8 @@ def mapModel_1(P):
 def main():
     result = model_1()
     t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
-    plotModel_1_Energie(t,result[0],result[1])
-    plotModel_1_Rendements(t,result[0])
-    mapModel_1(result[0])
+    plotModel_Energie(t,result[0],result[1])
+    plotModel_Rendements(t,result[0])
+    mapModel(result[0])
     
 main()
