@@ -11,7 +11,7 @@ from cylp.py.modeling.CyLPModel import CyLPArray
 N_pays = 15
 N_sites = 642
 N_heures_par_annee = 24*365
-N_annees = 1/12
+N_annees = 1/365
 N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 
 P_tot = 500000
@@ -50,11 +50,11 @@ P_max = CyLPArray(sites["capacites"])
 A =  np.matrix(np.zeros((N_periodes-1,N_sites)))
 for i in range(N_periodes-1):
     for j in range(N_sites):
-        A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
+        A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T-1])-np.sum(rendements[j,i*T:(i+1)*T-1])
 
 #| Resolution des problemes
 
-def model_1():
+def model_1(P_tot):
     
     simplex = CyClpSimplex()
     
@@ -116,7 +116,7 @@ def model_3():
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     simplex.addConstraint(A * P <= delta*P_tot*T,"Contrainte variance 1")
-    simplex.addConstraint(A * P <= delta*P_tot*T,"Contrainte variance 2")
+    simplex.addConstraint(-A * P <= delta*P_tot*T,"Contrainte variance 2")
     
     #Objectif
     simplex.objective = -c * P
@@ -129,17 +129,17 @@ def model_3():
     
 def model_4():
     
-    N_sites = 5
-    N_heures = 24
-    
-    r = np.hstack((np.ones(T),-np.ones(T)))
+    r = np.append(np.ones(T),-np.ones(T))
     M = np.zeros((N_periodes-1,N_heures*N_sites))
     for i in range(N_periodes-1):
         for j in range(0,N_sites*N_heures,N_heures):
             M[i,i*T:(i+2)*T] = r
     
-    print(M)
-    
+    """for j in range(N_periodes-1):
+        for i in range(N_heures*N_sites):
+            if M[j,i]!= 0:
+                print(j,i)
+    """
     simplex = CyClpSimplex()
     
     #Variables
@@ -152,8 +152,18 @@ def model_4():
     simplex.addConstraint(P.sum() == P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa * P_tot,"Contrainte offshore")
     
+    
+    #Contraintes hardcores
+    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*P_tot*T)
+    simplex.addConstraint(0 <= u,"Bornes sur l'écrêtement")
+    for i in range(N_sites):
+        for j in range(N_heures):
+            simplex.addConstraint(u[i*N_heures+j] - rendements[i,j] * P[i] <= 0)
+    simplex.addConstraint(A * P + M * u - v <= 0)
+    simplex.addConstraint(-A * P - M * u - v <= 0)
+    
     #Objectif
-    simplex.objective = -c * P
+    simplex.objective = -c * P + u.sum()
     
     #Solution
     simplex.primal()
@@ -215,7 +225,6 @@ def plotModel_Rendements(t,P):
     rendement_moyen = np.sum(rendement_total)/N_heures
     
     fig = plt.figure(figsize=(16,3))
-    plt.subplots_adjust(hspace=0.5)
     g1 = fig.add_subplot()
     
     g1.set_title("Evolution du rendement")
@@ -244,12 +253,26 @@ def mapModel(P):
     
     fig.show()
     
+def foo():
+    P_new = 0
+    theta= np.linspace(0.5,2,15)
+    f = np.zeros(len(theta))
+    for i in range(len(theta)):
+        P_new = P_tot
+        P = model_1(P_new*theta[i])[0]
+        f[i] = (rendements.dot(np.ones(N_heures)).T).dot(P)
+    
+    fig = plt.figure(figsize=(4,4))
+    g1 = fig.add_subplot(1,1,1)
+    
+    g1.scatter(theta,f)
+    
+    plt.plot()
 
 def main():
-    result = model_1()
+    result = model_4()
     t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
     plotModel_Energie(t,result[0],result[1])
     plotModel_Rendements(t,result[0])
-    mapModel(result[0])
     
 main()
