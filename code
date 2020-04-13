@@ -18,7 +18,7 @@ P_tot = 500000
 kappa = 0.17
 delta = 0.02
 T = 3
-N_periodes = int(np.floor(N_heures/T))
+N = int(np.floor(N_heures/T)) - 1
 
 
 #| Chargement des donnees
@@ -46,8 +46,8 @@ for i in range(N_sites):
     
 P_max = CyLPArray(sites["capacites"])
 
-A =  np.matrix(np.zeros((N_periodes-1,N_sites)))
-for i in range(N_periodes-1):
+A =  np.matrix(np.zeros((N,N_sites)))
+for i in range(N):
     for j in range(N_sites):
         A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
 
@@ -59,13 +59,13 @@ def model_1(theta=1):
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    v = simplex.addVariable('v',N_periodes-1)
+    v = simplex.addVariable('v',N)
     
     #Contraintes
     simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
-    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*theta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
     simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
     simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
     
@@ -84,13 +84,13 @@ def model_2(theta=1):
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    v = simplex.addVariable('v',N_periodes-1)
+    v = simplex.addVariable('v',N)
     
     #Contraintes
     simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() <= theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
-    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*theta*P_tot*T,"Contrainte variance 1")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
     simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
     simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
     
@@ -128,18 +128,13 @@ def model_3(theta=1):
     
 def model_4(theta=1):
     
-    r = np.append(np.ones(T),-np.ones(T))
-    M = np.zeros((N_periodes-1,N_heures*N_sites))
-    for i in range(N_periodes-1):
-        for j in range(0,N_sites*N_heures,N_heures):
-            M[i,i*T:(i+2)*T] = r
     
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    v = simplex.addVariable('v',N_periodes-1)
-    u = simplex.addVariable('u',N_heures*N_sites)
+    v = simplex.addVariable('v',N)
+    u = simplex.addVariable('u',N)
     
     #Contraintes
     simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
@@ -148,7 +143,7 @@ def model_4(theta=1):
     
     
     # LES CONTRAINTES !!!
-    simplex.addConstraint(v.sum() <= (N_periodes-1)*delta*P_tot*T)
+    simplex.addConstraint(v.sum() <= N*delta*P_tot*T)
     simplex.addConstraint(0 <= u,"Bornes sur l'écrêtement")
     for i in range(N_heures):
         N = np.matrix(np.diag(rendements[:,i]))
