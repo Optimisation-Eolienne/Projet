@@ -51,6 +51,7 @@ for i in range(N):
     for j in range(N_sites):
         A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
 
+
 #| Resolution des problèmes
 
 def model_1(theta=1):
@@ -128,28 +129,33 @@ def model_3(theta=1):
     
 def model_4(theta=1):
     
+    B = np.matrix(np.zeros((N,N_sites)))
+    for i in range(N):
+        for j in range(N_sites):
+            B[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
+            #print("i = {} | j = {}".format(i,j))
+        #print(B)
     
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
     v = simplex.addVariable('v',N)
-    u = simplex.addVariable('u',N)
+    u = simplex.addVariable('u',N+2)
     
     #Contraintes
     simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     
+    simplex.addConstraint(u >= 0)
+    simplex.addConstraint(u[0] == 0)
+    simplex.addConstraint(u[-1] == 0)
+    simplex.addConstraint(u[1:-1] - B * P <= 0)
     
-    # LES CONTRAINTES !!!
     simplex.addConstraint(v.sum() <= N*delta*P_tot*T)
-    simplex.addConstraint(0 <= u,"Bornes sur l'écrêtement")
-    for i in range(N_heures):
-        N = np.matrix(np.diag(rendements[:,i]))
-        simplex.addConstraint(N * P - u[i:i+N_sites:N_heures] <= 0)
-    simplex.addConstraint(A * P + M * u - v <= 0)
-    simplex.addConstraint(-A * P - M * u - v <= 0)
+    simplex.addConstraint(A * P - u[1:] + u[:-1] - v <= 0)
+    simplex.addConstraint(-A * P - u[1:] - u[:-1] - v <= 0)
     
     #Objectif
     simplex.objective = -c * P + u.sum()
@@ -161,16 +167,16 @@ def model_4(theta=1):
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
     
 
-def plotModel_Energie(t,P,E):
+def plotModel_Energie(t,result):
     
-    E_tot = np.transpose(P)@rendements
+    E_tot = np.transpose(result[0])@rendements
     P_offshore = np.zeros(N_sites)
     for i in range(N_sites):
         if is_offshore[i]:
-            P_offshore[i] = P[i]
+            P_offshore[i] = result[0][i]
     E_offshore = np.transpose(P_offshore)@rendements
     E_onshore = E_tot - E_offshore
-    proportion_offshore = np.sum(E_offshore)/E
+    proportion_offshore = np.sum(E_offshore)/result[1]
     proportion_onshore = 1 - proportion_offshore
     
     fig = plt.figure(figsize=(16,9))
@@ -197,16 +203,16 @@ def plotModel_Energie(t,P,E):
     plt.subplots_adjust(hspace=0.5)
     plt.show()
     
-    print("Energie totale produite : {:.0f} [MWh]".format(E))
+    print("Energie totale produite : {:.0f} [MWh]".format(result[1]))
     print("avec une proportion de {:.2f}% d'énergie onshore et {:.2f}% d'énergie offshore" \
           .format(100*proportion_onshore,100*proportion_offshore))
     
-def plotModel_Rendements(t,P):
+def plotModel_Rendements(t,result):
     N_installations = 0
     rendement_total = np.zeros(N_heures)
     
     for i in range(N_sites):
-        if np.around(P[i],3)!=0:
+        if np.around(result[0][i],3)!=0:
             N_installations += 1
             rendement_total += rendements[i,:N_heures]
     
@@ -240,7 +246,7 @@ def mapModel(P):
             geo_scope = "europe"
         )
     
-    fig.show()
+    plt.show()
     
 def plotModel_Ptot(theta_min,theta_max,theta_step,modelFonction):
     theta= np.arange(theta_min,theta_max+theta_step,theta_step)
@@ -257,13 +263,13 @@ def plotModel_Ptot(theta_min,theta_max,theta_step,modelFonction):
     g1.set_ylabel("Energie totale produite [TWh]")
     g1.scatter(theta,objectiveValue)
     
-    fig.show()
+    plt.show()
 
 def main():
     result = model_1()
     t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
-    plotModel_Energie(t,result[0],result[1])
-    plotModel_Rendements(t,result[0])
+    plotModel_Energie(t,result)
+    plotModel_Rendements(t,result)
     plotModel_Ptot(0.5,2,0.1,model_1)
         
 main()
