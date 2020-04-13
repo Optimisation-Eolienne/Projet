@@ -20,7 +20,6 @@ delta = 0.02
 T = 3
 N = int(np.floor(N_heures/T)) - 1
 
-
 #| Chargement des donnees
 
 sites = pd.read_csv("Sites.csv",index_col="index site").sort_index()
@@ -51,7 +50,6 @@ for i in range(N):
     for j in range(N_sites):
         A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
 
-
 #| Resolution des problèmes
 
 def model_1(theta=1):
@@ -63,7 +61,8 @@ def model_1(theta=1):
     v = simplex.addVariable('v',N)
     
     #Contraintes
-    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(0 <= P,"Positivité")
+    simplex.addConstraint(2*P <= 2*P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
@@ -77,7 +76,7 @@ def model_1(theta=1):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex.dualConstraintSolution["Bornes sur les puissances"]
 
 def model_2(theta=1):
     
@@ -88,7 +87,7 @@ def model_2(theta=1):
     v = simplex.addVariable('v',N)
     
     #Contraintes
-    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() <= theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
@@ -112,7 +111,7 @@ def model_3(theta=1):
     P = simplex.addVariable('P',N_sites)
     
     #Contraintes
-    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     simplex.addConstraint(A * P <= delta*theta*P_tot*T,"Contrainte variance 1")
@@ -129,33 +128,38 @@ def model_3(theta=1):
     
 def model_4(theta=1):
     
-    B = np.matrix(np.zeros((N,N_sites)))
-    for i in range(N):
+    B = np.matrix(np.zeros((N+1,N_sites)))
+    for i in range(N+1):
         for j in range(N_sites):
             B[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
-            #print("i = {} | j = {}".format(i,j))
-        #print(B)
+    
+    L = (np.diag(np.ones(N+1))-np.diag(np.ones(N),1))[:-1,:]
     
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
     v = simplex.addVariable('v',N)
-    u = simplex.addVariable('u',N+2)
+    u = simplex.addVariable('u',N+1)
     
     #Contraintes
-    simplex.addConstraint(0 <= 2*P <= 2*P_max,"Bornes sur les puissances")
+    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     
-    simplex.addConstraint(u >= 0)
-    simplex.addConstraint(u[0] == 0)
-    simplex.addConstraint(u[-1] == 0)
-    simplex.addConstraint(u[1:-1] - B * P <= 0)
+    simplex.addConstraint(0 <= 2*u,"Contrainte 1")
+    simplex.addConstraint(u - B * P <= 0,"Contrainte 2")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte 3")
+    simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte 4")
+    simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte 5")
     
-    simplex.addConstraint(v.sum() <= N*delta*P_tot*T)
-    simplex.addConstraint(A * P - u[1:] + u[:-1] - v <= 0)
-    simplex.addConstraint(-A * P - u[1:] - u[:-1] - v <= 0)
+    """
+    print(simplex.getConstraintStatus("Contrainte 1"))
+    print(simplex.getConstraintStatus("Contrainte 2"))
+    print(simplex.getConstraintStatus("Contrainte 3"))
+    print(simplex.getConstraintStatus("Contrainte 4"))
+    print(simplex.getConstraintStatus("Contrainte 5"))
+    """
     
     #Objectif
     simplex.objective = -c * P + u.sum()
@@ -163,6 +167,8 @@ def model_4(theta=1):
     #Solution
     simplex.primal()
     print(simplex.getStatusString())
+    
+    print(simplex.primalVariableSolution['u'])
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
     
@@ -264,12 +270,27 @@ def plotModel_Ptot(theta_min,theta_max,theta_step,modelFonction):
     g1.scatter(theta,objectiveValue)
     
     plt.show()
+    
+def foo():
+    contrainte = -result[2]
+    M = 0
+    M_index = -1
+    for i in range(len(contrainte)):
+        if (contrainte[i] >= M):
+            M = contrainte[i]
+            M_index = i
+    print(M_index)
+    print(M)
+    print(contrainte[69])
 
 def main():
-    result = model_1()
-    t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
-    plotModel_Energie(t,result)
-    plotModel_Rendements(t,result)
-    plotModel_Ptot(0.5,2,0.1,model_1)
+    result1 = model_1()
+    result4 = model_4()
+    print("model1 = {}".format(result1[1]))
+    print("model4 = {}".format(result4[1]))
+    #t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
+    #plotModel_Energie(t,result)
+    #plotModel_Rendements(t,result)
+    #plotModel_Ptot(0.5,2,0.1,model_1)
         
 main()
