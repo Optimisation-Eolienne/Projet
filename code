@@ -88,9 +88,7 @@ def model_1(theta=1):
     #Objectif
     simplex.objective = -c * P
     
-    #Solution
     simplex.primal()
-    print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
 
@@ -130,7 +128,6 @@ def model_2(theta=1):
     #Objectif
     simplex.objective = -c * P
     
-    #Solution
     simplex.primal()
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
@@ -169,7 +166,6 @@ def model_3(theta=1):
     #Objectif
     simplex.objective = -c * P
     
-    #Solution
     simplex.primal()
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
@@ -221,7 +217,6 @@ def model_4(theta=1):
     #Objectif
     simplex.objective = -c * P + u.sum()
     
-    #Solution
     simplex.primal()
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
