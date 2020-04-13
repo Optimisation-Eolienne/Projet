@@ -11,7 +11,7 @@ from cylp.py.modeling.CyLPModel import CyLPArray
 N_pays = 15
 N_sites = 642
 N_heures_par_annee = 24*365
-N_annees = 1/12
+N_annees = 1/6
 N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 
 P_tot = 500000
@@ -53,6 +53,22 @@ for i in range(N):
 #| Resolution des problèmes
 
 def model_1(theta=1):
+    """model_1() est une fonction qui résout le problème d'optimisation de la
+    question I.1
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ f(P) : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
     
     simplex = CyClpSimplex()
     
@@ -76,9 +92,25 @@ def model_1(theta=1):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex.dualConstraintSolution["Bornes sur les puissances"]
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
 
 def model_2(theta=1):
+    """model_2() est une fonction qui résout le problème d'optimisation de la
+    question I.5 a)
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ f(P) : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
     
     simplex = CyClpSimplex()
     
@@ -99,11 +131,26 @@ def model_2(theta=1):
     
     #Solution
     simplex.primal()
-    print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
 
 def model_3(theta=1):
+    """model_3() est une fonction qui résout le problème d'optimisation de la
+    question I.5 b)
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ f(P) : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
     
     simplex = CyClpSimplex()
     
@@ -122,11 +169,26 @@ def model_3(theta=1):
     
     #Solution
     simplex.primal()
-    print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
     
 def model_4(theta=1):
+    """model_4() est une fonction qui résout le problème d'optimisation de la
+    question I.5 c)
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ f(P) : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
     
     B = np.matrix(np.zeros((N+1,N_sites)))
     for i in range(N+1):
@@ -153,22 +215,11 @@ def model_4(theta=1):
     simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte 4")
     simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte 5")
     
-    """
-    print(simplex.getConstraintStatus("Contrainte 1"))
-    print(simplex.getConstraintStatus("Contrainte 2"))
-    print(simplex.getConstraintStatus("Contrainte 3"))
-    print(simplex.getConstraintStatus("Contrainte 4"))
-    print(simplex.getConstraintStatus("Contrainte 5"))
-    """
-    
     #Objectif
     simplex.objective = -c * P + u.sum()
     
     #Solution
     simplex.primal()
-    print(simplex.getStatusString())
-    
-    print(simplex.primalVariableSolution['u'])
     
     return simplex.primalVariableSolution['P'],-simplex.objectiveValue
     
@@ -284,13 +335,10 @@ def foo():
     print(contrainte[69])
 
 def main():
-    result1 = model_1()
-    result4 = model_4()
-    print("model1 = {}".format(result1[1]))
-    print("model4 = {}".format(result4[1]))
-    #t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
-    #plotModel_Energie(t,result)
-    #plotModel_Rendements(t,result)
-    #plotModel_Ptot(0.5,2,0.1,model_1)
+    result = model_2()
+    t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
+    plotModel_Energie(t,result)
+    plotModel_Rendements(t,result)
+    plotModel_Ptot(0.5,2,0.1,model_1)
         
 main()
