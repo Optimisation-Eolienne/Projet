@@ -64,7 +64,7 @@ def model_1(theta=1):
     Un tuple contenant les trois éléments suivant:
     @ P : Vecteur (numpy array) contenant les puissances associées à une 
     solution optimal
-    @ f(P) : La valeur optimale de la fonction objectif
+    @ E : La valeur optimale de la fonction objectif
     @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
     la résolution du problème permettant d'avoir accès à des informations 
     supplémentaires
@@ -104,7 +104,7 @@ def model_2(theta=1):
     Un tuple contenant les trois éléments suivant:
     @ P : Vecteur (numpy array) contenant les puissances associées à une 
     solution optimal
-    @ f(P) : La valeur optimale de la fonction objectif
+    @ E : La valeur optimale de la fonction objectif
     @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
     la résolution du problème permettant d'avoir accès à des informations 
     supplémentaires
@@ -144,7 +144,7 @@ def model_3(theta=1):
     Un tuple contenant les trois éléments suivant:
     @ P : Vecteur (numpy array) contenant les puissances associées à une 
     solution optimal
-    @ f(P) : La valeur optimale de la fonction objectif
+    @ E : La valeur optimale de la fonction objectif
     @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
     la résolution du problème permettant d'avoir accès à des informations 
     supplémentaires
@@ -182,7 +182,7 @@ def model_4(theta=1):
     Un tuple contenant les trois éléments suivant:
     @ P : Vecteur (numpy array) contenant les puissances associées à une 
     solution optimal
-    @ f(P) : La valeur optimale de la fonction objectif
+    @ E : La valeur optimale de la fonction objectif
     @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
     la résolution du problème permettant d'avoir accès à des informations 
     supplémentaires
