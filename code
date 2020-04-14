@@ -168,7 +168,7 @@ def model_3(theta=1):
     
     simplex.primal()
     
-    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
     
 def model_4(theta=1):
     """model_4() est une fonction qui résout le problème d'optimisation de la
@@ -188,10 +188,10 @@ def model_4(theta=1):
     supplémentaires
     """
     
-    B = np.matrix(np.zeros((N+1,N_sites)))
+    D = np.matrix(np.zeros((N+1,N_sites)))
     for i in range(N+1):
         for j in range(N_sites):
-            B[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
+            D[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
     
     L = (np.diag(np.ones(N+1))-np.diag(np.ones(N),1))[:-1,:]
     
@@ -208,8 +208,8 @@ def model_4(theta=1):
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     
-    simplex.addConstraint(0 <= 2*u,"Contrainte 1")
-    simplex.addConstraint(u - B * P <= 0,"Contrainte 2")
+    simplex.addConstraint(0 <= u,"Contrainte 1")
+    simplex.addConstraint(u - D * P <= 0,"Contrainte 2")
     simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte 3")
     simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte 4")
     simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte 5")
@@ -219,7 +219,7 @@ def model_4(theta=1):
     
     simplex.primal()
     
-    return simplex.primalVariableSolution['P'],-simplex.objectiveValue
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
     
 
 def plotModel_Energie(t,result):
