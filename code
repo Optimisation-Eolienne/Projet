@@ -81,9 +81,9 @@ def model_1(theta=1):
     simplex.addConstraint(P <= P_max,"Bornes supérieures")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
-    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
-    simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
-    simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variabilité 3")
     
     #Objectif
     simplex.objective = -c * P
@@ -121,9 +121,9 @@ def model_2(theta=1):
     simplex.addConstraint(P <= P_max,"Bornes supérieures")
     simplex.addConstraint(P.sum() <= theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
-    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variance 1")
-    simplex.addConstraint(A * P - v <= 0,"Contrainte variance 2")
-    simplex.addConstraint(-A * P - v <= 0,"Contrainte variance 3")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variabilité 3")
     
     #Objectif
     simplex.objective = -c * P
@@ -160,8 +160,8 @@ def model_3(theta=1):
     simplex.addConstraint(P <= P_max,"Bornes supérieures")
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
-    simplex.addConstraint(A * P <= delta*theta*P_tot*T,"Contrainte variance 1")
-    simplex.addConstraint(-A * P <= delta*theta*P_tot*T,"Contrainte variance 2")
+    simplex.addConstraint(A * P <= delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(-A * P <= delta*theta*P_tot*T,"Contrainte variabilité 2")
     
     #Objectif
     simplex.objective = -c * P
@@ -208,11 +208,11 @@ def model_4(theta=1):
     simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
     simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
     
-    simplex.addConstraint(0 <= u,"Contrainte 1")
-    simplex.addConstraint(u - D * P <= 0,"Contrainte 2")
-    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte 3")
-    simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte 4")
-    simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte 5")
+    simplex.addConstraint(0 <= u,"Borne inférieur sur l'écrêtement")
+    simplex.addConstraint(u - D * P <= 0,"Borne supérieure sur l'écrêtement")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte variabilité 3")
     
     #Objectif
     simplex.objective = -c * P + u.sum()
