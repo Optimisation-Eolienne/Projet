@@ -193,7 +193,7 @@ def model_4(theta=1):
         for j in range(N_sites):
             D[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
     
-    L = (np.diag(np.ones(N+1))-np.diag(np.ones(N),1))[:-1,:]
+    L = (-np.diag(np.ones(N+1))+np.diag(np.ones(N),1))[:-1,:]
     
     simplex = CyClpSimplex()
     
