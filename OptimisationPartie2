@@ -109,7 +109,7 @@ def model_1():
     simplex.addConstraint(0 <= FOut , "Flux sortant minimal")
     simplex.addConstraint(FOut <= FOutMax , "Flux sortant minimal")
     simplex.addConstraint(0 <= (FIn - FOut + A)*B - FOut , "Flux sortant plus petit que la réserve") # + flux
-    simplex.addConstraint(0 <= stockage_hydro - (FIn - FOut + A)*B - FIn , "Flux entrant plus petit que la capacité restante")
+    simplex.addConstraint(0 <= sum(stockage_hydro) - (FIn - FOut + A)*B - FIn , "Flux entrant plus petit que la capacité restante")
     simplex.addConstraint(c*P + (-FIn+FOut) <= C  , "Contraine sur la production minimal")
     #simplex.addConstraint( FIn == c*P - C , "")
     #simplex.addConstraint( , ""))
