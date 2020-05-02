@@ -1,1 +1,131 @@
+## imports classiques
+import numpy as np
+import matplotlib.pyplot as plt
+import math 
+import pandas as pd
+import plotly.graph_objects as go
+import matplotlib.colors as colors
+import random
+from cylp.cy import CyClpSimplex
+from cylp.py.modeling.CyLPModel import CyLPArray
 
+
+
+#| Parametres
+
+N_pays = 15
+N_sites = 642
+N_heures_par_annee = 24*365
+N_annees = 1/12
+N_heures = int(np.ceil(N_heures_par_annee*N_annees))
+
+T = 3
+N = int(np.floor(N_heures/T)) - 1
+
+#| Chargement des donnees
+
+# Consommation électrique (demande) par pays et par heure (matrice : ligne = pays, colonne = heure)
+consommations = np.genfromtxt('Consommations.csv', delimiter=',')[:,:N_heures]
+
+sites = pd.read_csv("Sites.csv",index_col="index site").sort_index()
+rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
+rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
+
+# Stockage disponible par pays (en MWh)
+stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
+# Puissances maximales de turbinage et de pompage disponibles par pays (en MW)
+p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
+p_pompage = np.array([5223 , 3580 , 1307 , 0 , 5347 , 4303 , 292 , 7544 , 1100 , 1396 , 0 , 1029 , 2744 , 45 , 1636 ])
+eta_turbinage = 0.75 # Rendement pour le turbinage (sans unité)
+rivieres = np.genfromtxt('Apports-hydro.csv', delimiter=',')[:,:N_heures]
+
+# Couts d'installation amortis des éoliennes
+cout_instal_onshore  = 168903 # Coût *amorti sur un an* pour l'installation d'un MW éolien on-shore (euros/MW/an)
+cout_instal_offshore = 300336 # Coût *amorti sur un an* pour l'installation d'un MW éolien on-shore (euros/MW/an)
+
+#| Matrice et vecteurs principaux utilisés dans les problèmes
+
+P_max = CyLPArray(sites["capacites"])
+#flux des rivieres
+A = CyLPArray(np.zeros(N+1))
+for i in range(len(rivieres[0])//3):
+    for j in range(15):
+        A[i] += sum(rivieres[j][i*3: i*3 + 3])
+
+#Consomation
+C = CyLPArray(np.zeros(N+1))
+for i in range(len(consommations[0])//3):
+    for j in range(15):
+        C[i] += sum(consommations[j][i*3: i*3 + 3])
+
+
+
+is_offshore = pd.Series(0,index=range(N_sites))
+is_offshore[sites["capacite offshore"]=="Oui"] = 1
+is_offshore = CyLPArray(is_offshore)
+
+rendements = np.zeros((N_sites,N_heures))
+for i in range(N_sites):
+    if is_offshore[i]:
+        rendements[i,:] = rendements_offshore[i,:N_heures]
+    else:
+        rendements[i,:] = rendements_onshore[i,:N_heures]
+
+c = CyLPArray(np.zeros(N_sites))
+for i in range(N_sites):
+    c[i] = np.sum(rendements[i,:])
+    
+cout = CyLPArray(np.zeros(N_sites))
+for i in range(N_sites):
+    if(is_offshore[i]):
+        cout[i] = cout_instal_offshore
+    else:
+        cout[i] = cout_instal_onshore
+
+
+#|Model d'optimisation
+
+def model_1():
+    ones =  np.ones((N + 1,N + 1))
+    B = np.matrix(np.tril(ones).T)
+    
+    
+    FInMax = sum(p_pompage)
+    FOutMax = sum(p_turbinage)
+    
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    FIn = simplex.addVariable('FIn',N+1)
+    FOut = simplex.addVariable('FOut',N+1)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= P , "Positivité")
+    simplex.addConstraint(P <= P_max , "Bornes supérieures")
+    simplex.addConstraint(0 <= FIn , "Flux entrant minimal")
+    simplex.addConstraint(FIn <= FInMax , "Flux entrant maximal")
+    simplex.addConstraint(0 <= FOut , "Flux sortant minimal")
+    simplex.addConstraint(FOut <= FOutMax , "Flux sortant minimal")
+    simplex.addConstraint(0 <= (FIn - FOut + A)*B - FOut , "Flux sortant plus petit que la réserve") # + flux
+    simplex.addConstraint(0 <= stockage_hydro - (FIn - FOut + A)*B - FIn , "Flux entrant plus petit que la capacité restante")
+    simplex.addConstraint(c*P + (-FIn+FOut) <= C  , "Contraine sur la production minimal")
+    #simplex.addConstraint( FIn == c*P - C , "")
+    #simplex.addConstraint( , ""))
+    
+    
+    #Objectif
+    simplex.objective = -cout*P * N_annees + FOut*eta_turbinage
+    
+    simplex.primal()
+    
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['FOut'],-simplex.objectiveValue,simplex
+
+def main():
+    print(model_1()[0])
+    
+
+main()
