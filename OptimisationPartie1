@@ -1,141 +1,325 @@
-## imports classiques
 import numpy as np
 import matplotlib.pyplot as plt
-import math 
 import pandas as pd
 import plotly.graph_objects as go
-import matplotlib.colors as colors
-import random
 from cylp.cy import CyClpSimplex
 from cylp.py.modeling.CyLPModel import CyLPArray
-
-
-
 #| Parametres
-
 N_pays = 15
 N_sites = 642
 N_heures_par_annee = 24*365
-N_annees = 3/365
+N_annees = 1/12
 N_heures = int(np.ceil(N_heures_par_annee*N_annees))
-
+P_tot = 500000
+kappa = 0.17
+delta = 0.02
 T = 3
 N = int(np.floor(N_heures/T)) - 1
-
 #| Chargement des donnees
-
-# Consommation électrique (demande) par pays et par heure (matrice : ligne = pays, colonne = heure)
-consommations = np.genfromtxt('Consommations.csv', delimiter=',')[:,:N_heures]
-
 sites = pd.read_csv("Sites.csv",index_col="index site").sort_index()
 rendements_offshore = np.genfromtxt('Rendements_offshore.csv', delimiter=',')[:,:N_heures]
 rendements_onshore = np.genfromtxt('Rendements_onshore.csv', delimiter=',')[:,:N_heures]
-
-# Stockage disponible par pays (en MWh)
-stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
-# Puissances maximales de turbinage et de pompage disponibles par pays (en MW)
-p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
-p_pompage = np.array([5223 , 3580 , 1307 , 0 , 5347 , 4303 , 292 , 7544 , 1100 , 1396 , 0 , 1029 , 2744 , 45 , 1636 ])
-eta_turbinage = 0.75 # Rendement pour le turbinage (sans unité)
-rivieres = np.genfromtxt('Apports-hydro.csv', delimiter=',')[:,:N_heures]
-
-# Couts d'installation amortis des éoliennes
-cout_instal_onshore  = 168903 # Coût *amorti sur un an* pour l'installation d'un MW éolien on-shore (euros/MW/an)
-cout_instal_offshore = 300336 # Coût *amorti sur un an* pour l'installation d'un MW éolien on-shore (euros/MW/an)
-
-#| Matrice et vecteurs principaux utilisés dans les problèmes
-
-P_max = CyLPArray(sites["capacites"])
-#flux des rivieres
-A = CyLPArray(np.zeros(N+1))
-for i in range(len(rivieres[0])//3):
-    for j in range(15):
-        A[i] += sum(rivieres[j][i*3: i*3 + 3])
-
-#Consomation
-C = CyLPArray(np.zeros(N+1))
-for i in range(len(consommations[0])//3):
-    for j in range(15):
-        C[i] += sum(consommations[j][i*3: i*3 + 3])
-
-
-
+#| Matrice et vecteurs principaux utilisés dans les problèmes 
 is_offshore = pd.Series(0,index=range(N_sites))
 is_offshore[sites["capacite offshore"]=="Oui"] = 1
 is_offshore = CyLPArray(is_offshore)
-
 rendements = np.zeros((N_sites,N_heures))
 for i in range(N_sites):
     if is_offshore[i]:
         rendements[i,:] = rendements_offshore[i,:N_heures]
     else:
         rendements[i,:] = rendements_onshore[i,:N_heures]
-
-#rendement
 c = CyLPArray(np.zeros(N_sites))
 for i in range(N_sites):
     c[i] = np.sum(rendements[i,:])
-
-
-#vecteur de cout  
-cout = CyLPArray(np.zeros(N_sites))
-for i in range(N_sites):
-    if(is_offshore[i]):
-        cout[i] = cout_instal_offshore
-    else:
-        cout[i] = cout_instal_onshore
-
-
-#|Model d'optimisation
-
-def model_1():
-    ones =  np.ones((N + 1,N + 1))
-    D = np.matrix(np.tril(ones).T)
-    B = np.zeros((N + 1,N + 1))
-    B[:,1:] = D[:,:-1]
-    B = CyLPArray(B.T)
     
+P_max = CyLPArray(sites["capacites"])
+A =  np.matrix(np.zeros((N,N_sites)))
+for i in range(N):
+    for j in range(N_sites):
+        A[i,j] = np.sum(rendements[j,(i+1)*T:(i+2)*T])-np.sum(rendements[j,i*T:(i+1)*T])
+#| Resolution des problèmes
+def model_1(theta=1):
+    """model_1() est une fonction qui résout le problème d'optimisation de la
+    question I.1
     
-    hydro = sum(stockage_hydro)
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
     
-    apportRivieres = - CyLPArray((A.T).dot(D).T)
-    
-    #Turbinage/pompage pour une période par site
-    FInMax = sum(p_pompage)*T
-    
-    FOutMax =  sum(p_turbinage)*T
-    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ E : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
     
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    F = simplex.addVariable('F',N+1) #F négatif lors les barages se remplissent
+    v = simplex.addVariable('v',N)
     
     #Contraintes
-    simplex.addConstraint(0 <= P , "Positivité")
-    simplex.addConstraint(P <= P_max , "Bornes supérieures")
-    simplex.addConstraint(F >= -FInMax , "Pompage max")
-    simplex.addConstraint(F <= FOutMax , "Turbinage max")
-    simplex.addConstraint(0 <= (B*F - apportRivieres) - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
-    simplex.addConstraint(0 >= hydro - (B*F +  apportRivieres) + F , "Flux entrant plus petit que la capacité restante")
-    simplex.addConstraint(c*P + F >= C  , "Contraine sur la production minimal")
-    #simplex.addConstraint( FIn == c*P - C , "")
-    #simplex.addConstraint( , ""))
-    
+    simplex.addConstraint(0 <= P,"Positivité")
+    simplex.addConstraint(P <= P_max,"Bornes supérieures")
+    simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variabilité 3")
     
     #Objectif
-    simplex.objective = cout*P * N_annees
+    simplex.objective = -c * P
     
     simplex.primal()
     
-    print(simplex.getStatusString())
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
+def model_2(theta=1):
+    """model_2() est une fonction qui résout le problème d'optimisation de la
+    question I.5 a)
     
-    return simplex.primalVariableSolution['F'],simplex.objectiveValue,simplex
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ E : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    v = simplex.addVariable('v',N)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= P,"Positivité")
+    simplex.addConstraint(P <= P_max,"Bornes supérieures")
+    simplex.addConstraint(P.sum() <= theta*P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P - v <= 0,"Contrainte variabilité 3")
+    
+    #Objectif
+    simplex.objective = -c * P
+    
+    simplex.primal()
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
+def model_3(theta=1):
+    """model_3() est une fonction qui résout le problème d'optimisation de la
+    question I.5 b)
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ E : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= P,"Positivité")
+    simplex.addConstraint(P <= P_max,"Bornes supérieures")
+    simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
+    simplex.addConstraint(A * P <= delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(-A * P <= delta*theta*P_tot*T,"Contrainte variabilité 2")
+    
+    #Objectif
+    simplex.objective = -c * P
+    
+    simplex.primal()
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
+    
+def model_4(theta=1):
+    """model_4() est une fonction qui résout le problème d'optimisation de la
+    question I.5 c)
+    
+    Inputs:
+    @ theta : Valeur mise par défaut à 1 permettant de faire varier la puissance
+    totale qui devient theta*P_tot
+    
+    Outputs:
+    Un tuple contenant les trois éléments suivant:
+    @ P : Vecteur (numpy array) contenant les puissances associées à une 
+    solution optimal
+    @ E : La valeur optimale de la fonction objectif
+    @ simplex : Objet de la classe CyClpSimplex qui est utilisé lors de 
+    la résolution du problème permettant d'avoir accès à des informations 
+    supplémentaires
+    """
+    
+    D = np.matrix(np.zeros((N+1,N_sites)))
+    for i in range(N+1):
+        for j in range(N_sites):
+            D[i,j] = np.sum(rendements[j,i*T:(i+1)*T])
 
+    L = (np.diag(np.ones(N+1))-np.diag(np.ones(N),1))[:-1,:]
+    L = (-np.diag(np.ones(N+1))+np.diag(np.ones(N),1))[:-1,:]
+
+    simplex = CyClpSimplex()
+
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    v = simplex.addVariable('v',N)
+    u = simplex.addVariable('u',N+1)
+    
+    #Contraintes
+    simplex.addConstraint(0 <= P,"Positivité")
+    simplex.addConstraint(P <= P_max,"Bornes supérieures")
+    simplex.addConstraint(P.sum() == theta*P_tot,"Contrainte P_tot")
+    simplex.addConstraint(is_offshore * P == kappa*theta*P_tot,"Contrainte offshore")
+    
+    simplex.addConstraint(0 <= u,"Borne inférieur sur l'écrêtement")
+    simplex.addConstraint(u - D * P <= 0,"Borne supérieure sur l'écrêtement")
+    simplex.addConstraint(v.sum() <= N*delta*theta*P_tot*T,"Contrainte variabilité 1")
+    simplex.addConstraint(A * P - L * u - v <= 0,"Contrainte variabilité 2")
+    simplex.addConstraint(-A * P + L * u - v <= 0,"Contrainte variabilité 3")
+    
+    #Objectif
+    simplex.objective = -c * P + u.sum()
+    
+    simplex.primal()
+    
+    return simplex.primalVariableSolution['P'],-simplex.objectiveValue,simplex
+    
+def plotModel_Energie(t,result):
+    
+    E_tot = np.transpose(result[0])@rendements
+    P_offshore = np.zeros(N_sites)
+    for i in range(N_sites):
+        if is_offshore[i]:
+            P_offshore[i] = result[0][i]
+    E_offshore = np.transpose(P_offshore)@rendements
+    E_onshore = E_tot - E_offshore
+    proportion_offshore = np.sum(E_offshore)/result[1]
+    proportion_onshore = 1 - proportion_offshore
+    
+    fig = plt.figure(figsize=(16,9))
+    plt.subplots_adjust(hspace=0.5)
+    g1 = fig.add_subplot(3,1,1)
+    g2 = fig.add_subplot(3,1,2)
+    g3 = fig.add_subplot(3,1,3)
+    
+    g1.set_title("Production d'énerge totale")
+    g1.set_xlabel("Temps [année]")
+    g1.set_ylabel("Energie [MWh]")
+    g1.plot(t,E_tot)
+    
+    g2.set_title("Production d'énergie onshore")
+    g2.set_xlabel("Temps [année]")
+    g2.set_ylabel("Energie [MWh]")
+    g2.plot(t,E_onshore)
+    
+    g3.set_title("Production d'énergie offshore")
+    g3.set_xlabel("Temps [année]")
+    g3.set_ylabel("Energie [MWh]")
+    g3.plot(t,E_offshore)
+    
+    plt.subplots_adjust(hspace=0.5)
+    plt.show()
+    
+    print("Energie totale produite : {:.0f} [MWh]".format(result[1]))
+    print("avec une proportion de {:.2f}% d'énergie onshore et {:.2f}% d'énergie offshore" \
+          .format(100*proportion_onshore,100*proportion_offshore))
+    
+def plotModel_Rendements(t,result):
+    N_installations = 0
+    rendement_total = np.zeros(N_heures)
+    
+    for i in range(N_sites):
+        if np.around(result[0][i],3)!=0:
+            N_installations += 1
+            rendement_total += rendements[i,:N_heures]
+    
+    rendement_total = rendement_total/N_installations
+    rendement_moyen = np.sum(rendement_total)/N_heures
+    
+    fig = plt.figure(figsize=(16,3))
+    g1 = fig.add_subplot(1,1,1)
+    
+    g1.set_title("Evolution du rendement")
+    g1.set_xlabel("Temps [année]")
+    g1.set_ylabel("Rendement [/]")
+    g1.plot(t,rendement_total)
+    
+    plt.show()
+    
+    print("Le rendement moyen est de {:.2f} [/]".format(rendement_moyen))
+def mapModel(P):
+    fig = go.Figure(data=go.Scattergeo(
+            lon = sites["longitude"],
+            lat = sites["latitude"],
+            hovertext = sites["pays"],
+            marker = dict(
+                color = sites["couleur"],
+                symbol = "circle",
+                size = np.around(P)/300)
+            ))
+    fig.update_layout(
+            title = "Repartion des puissances installées",
+            geo_scope = "europe"
+        )
+    
+    plt.show()
+    
+def plotModel_Ptot(theta_min,theta_max,theta_step,modelFonction):
+    theta= np.arange(theta_min,theta_max+theta_step,theta_step)
+    objectiveValue = np.zeros(len(theta))
+    for i in range(len(theta)):
+        objectiveValue[i] = modelFonction(theta[i])[1]
+    objectiveValue = objectiveValue/(10**6)
+    
+    fig = plt.figure(figsize=(6,4))
+    g1 = fig.add_subplot(1,1,1)
+    
+    g1.set_title("Variation de l'énergie totale produite en fonction de P_tot")
+    g1.set_xlabel("theta [/]")
+    g1.set_ylabel("Energie totale produite [TWh]")
+    g1.scatter(theta,objectiveValue)
+    
+    plt.show()
+    
+def foo():
+    contrainte = -result[2]
+    M = 0
+    M_index = -1
+    for i in range(len(contrainte)):
+        if (contrainte[i] >= M):
+            M = contrainte[i]
+            M_index = i
+    print(M_index)
+    print(M)
+    print(contrainte[69])
 def main():
-    print(sum(model_1()[0]))
-    print(model_1()[1])
-    #model_1()
-
+    result = model_2()
+    t = np.linspace(1,N_heures,N_heures)/N_heures_par_annee 
+    plotModel_Energie(t,result)
+    plotModel_Rendements(t,result)
+    plotModel_Ptot(0.5,2,0.1,model_1)
+        
 main()
