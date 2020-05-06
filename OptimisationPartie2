@@ -16,7 +16,7 @@ from cylp.py.modeling.CyLPModel import CyLPArray
 N_pays = 15
 N_sites = 642
 N_heures_par_annee = 24*365
-N_annees = 3/365
+N_annees = 7/365
 N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 
 T = 3
@@ -93,12 +93,17 @@ def model_1():
     D = np.matrix(np.tril(ones).T)
     B = np.zeros((N + 1,N + 1))
     B[:,1:] = D[:,:-1]
-    B = CyLPArray(B.T)
-    
+    B = - CyLPArray(B.T)
+
     
     hydro = sum(stockage_hydro)
+    demiBarage = hydro/2
     
-    apportRivieres = - CyLPArray((A.T).dot(D).T)
+    #ajout d'un demi barage
+    #A[0] += demiBarage
+    
+    apportRivieres = CyLPArray((A.T).dot(D).T)
+    
     
     #Turbinage/pompage pour une période par site
     FInMax = sum(p_pompage)*T
@@ -112,30 +117,99 @@ def model_1():
     P = simplex.addVariable('P',N_sites)
     F = simplex.addVariable('F',N+1) #F négatif lors les barages se remplissent
     
+    
     #Contraintes
     simplex.addConstraint(0 <= P , "Positivité")
     simplex.addConstraint(P <= P_max , "Bornes supérieures")
     simplex.addConstraint(F >= -FInMax , "Pompage max")
     simplex.addConstraint(F <= FOutMax , "Turbinage max")
-    simplex.addConstraint(0 <= (B*F - apportRivieres) - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
-    simplex.addConstraint(0 >= hydro - (B*F +  apportRivieres) + F , "Flux entrant plus petit que la capacité restante")
+    simplex.addConstraint(0 <= (B*F + apportRivieres) - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
+    simplex.addConstraint(0 <= hydro - (B*F +  apportRivieres) + F , "Flux entrant plus petit que la capacité restante")
     simplex.addConstraint(c*P + F >= C  , "Contraine sur la production minimal")
-    #simplex.addConstraint( FIn == c*P - C , "")
-    #simplex.addConstraint( , ""))
+    #simplex.addConstraint( F.sum() + apportRivieres == demiBarage, "50% du barage à la fin")
+    
+    '''flux sortant : F <= somme flux précedent + riviere
+    flux entrant : -F <= capacité - contenu'''
     
     
     #Objectif
-    simplex.objective = cout*P * N_annees
+    simplex.objective = cout*P*N_annees
     
     simplex.primal()
     
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['F'],simplex.objectiveValue,simplex
+    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex
+
+def model_2():
+    ones =  np.ones((N + 1,N + 1))
+    D = np.matrix(np.tril(ones).T)
+    B = np.zeros((N + 1,N + 1))
+    B[:,1:] = D[:,:-1]
+    B = CyLPArray(B.T)
+    
+    diag = np.diag(np.ones(N_sites))
+    
+    P_demi = P_max/2
+    hydro = sum(stockage_hydro)
+    
+    sigg = CyLPArray(np.zeros(N_sites))
+    for i in range(N_sites):
+        if(is_offshore[i]):
+            sigg[i] = cout_instal_offshore*P_max[i]
+        else:
+            sigg[i] = cout_instal_onshore*P_max[i]
+            
+    sigz = CyLPArray(np.zeros(N_sites))
+    for i in range(N_sites):
+        c[i] = np.sum(rendements[i,:])*P_demi[i]
+    sigz = sigz.dot(diag)
+    
+    
+    apportRivieres = - CyLPArray((A.T).dot(D).T)
+    
+    #Turbinage/pompage pour une période par site
+    FInMax = sum(p_pompage)*T
+    
+    FOutMax =  sum(p_turbinage)*T
+    
+    
+    simplex = CyClpSimplex()
+    
+    #Variables
+    F = simplex.addVariable('F',N+1) #F négatif lors les barages se remplissent
+    U = simplex.addVariable('U',N_sites, isInt = True)
+    
+    
+    #Contraintes
+    simplex.addConstraint(U >= 0, "discontinuité 1")
+    simplex.addConstraint(U <= 2, "discontinuité 2")
+    simplex.addConstraint(F >= -FInMax , "Pompage max")
+    simplex.addConstraint(F <= FOutMax , "Turbinage max")
+    simplex.addConstraint(0 <= (B*F + apportRivieres) - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
+    simplex.addConstraint(0 <= hydro - (B*F +  apportRivieres) + F , "Flux entrant plus petit que la capacité restante")
+    simplex.addConstraint(sigz*U + F >= C  , "Contraine sur la production minimal")
+    
+    #Contraintes model 2
+    
+    
+    
+    
+    
+    #Objectif
+    simplex.objective = sigg*U*N_annees
+    
+    simplex.primal()
+    
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['U'],simplex.objectiveValue,simplex
+
 
 def main():
-    print(sum(model_1()[0]))
-    print(model_1()[1])
+    print(model_1()[1]*N_annees)
+    print()
     #model_1()
-
+    
+    
 main()
