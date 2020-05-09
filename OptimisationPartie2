@@ -63,36 +63,40 @@ for i in range(m):
     for j in range(N_pays):
         C[j,i] = np.sum(consommations[j,i*T:(i+1)*T])
 
-U = np.matrix(np.triu(np.ones((m,m))))
+U = np.matrix(np.tril(np.ones((m,m))))
+D = np.matrix(np.tril(np.ones((m,m)),k=-1))
 
 #| Modèle d'optimisation
 
 def model_1(index_pays=-1):
     if index_pays==-1:
         S_max = np.sum(stockage_hydro)
-        h1 = np.sum(p_turbinage)*T
-        h2 = np.sum(p_pompage)*T
-        q4 = CyLPArray(np.zeros(m))
+        h1 = np.sum(p_pompage)*T
+        h2 = np.sum(p_turbinage)*T
+        q4 = np.zeros(m)
         E = CyLPArray(np.zeros(m))
         for i in range(m):
             q4[i] = np.sum(r[:,i])
             E[i] = np.sum(C[:,i])
     else:
         S_max = stockage_hydro[index_pays]
-        h1 = p_turbinage[index_pays]*T
-        h2 = p_pompage[index_pays]*T
-        q4 = CyLPArray(r[index_pays,:])
-        E = CyLPArray(C[index_pays,:])
+        h1 = p_pompage[index_pays]*T
+        h2 = p_turbinage[index_pays]*T
+        q4 = CyLPArray(np.transpose(r[index_pays,:]))
+        E = CyLPArray(np.transpose(C[index_pays,:]))
     
-    S_0 = 0.5*S_max
+    S_0 = 0
     
     simplex = CyClpSimplex()
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    s = simplex.addVariable('s',m)
     q1 = simplex.addVariable('q1',m)
     q2 = simplex.addVariable('q2',m)
+    q3 = simplex.addVariable('q3',m)
+    
+    v = CyLPArray(np.ones(m))
+    Q4 = CyLPArray(U@q4)
     
     #Contraintes
     simplex.addConstraint(0 <= P,"Positivité")
@@ -100,12 +104,12 @@ def model_1(index_pays=-1):
     simplex.addConstraint(0 <= q1)
     simplex.addConstraint(q1 <= h1,"c1")
     simplex.addConstraint(0 <= q2)
-    simplex.addConstraint(q2 <= 1/eta_turbinage*h2,"c2")
-    simplex.addConstraint(U*s >= -S_0)
-    simplex.addConstraint(U*s <= S_max-S_0,"c4")
-    simplex.addConstraint(q1 + q4 - q2 - s == 0)
-    simplex.addConstraint(0 <= A*P + q2 - E - q1)
-    simplex.addConstraint(A*P + q2 >= E,"c")
+    simplex.addConstraint(eta_turbinage*q2 <= h2,"c2")
+    simplex.addConstraint(-S_0*v-Q4 <= U*(q1-q2))
+    simplex.addConstraint(U*(q1-q2) <= (S_max-S_0)*v-Q4,"c4")
+    simplex.addConstraint(q1+q3-A*P == 0,"cf2")
+    simplex.addConstraint(q3+eta_turbinage*q2 >= E,"cf")
+    simplex.addConstraint(q1.sum()-q2.sum()==-Q4[-1])
     
     #Objectif
     simplex.objective = c*P
@@ -115,6 +119,52 @@ def model_1(index_pays=-1):
     print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['q2'],simplex.objectiveValue,simplex
+
+def model_2(index_pays=-1):
+    if index_pays==-1:
+        S_max = np.sum(stockage_hydro)
+        h1 = np.sum(p_pompage)*T
+        h2 = np.sum(p_turbinage)*T
+        q4 = np.zeros(m)
+        E = CyLPArray(np.zeros(m))
+        for i in range(m):
+            q4[i] = np.sum(r[:,i])
+            E[i] = np.sum(C[:,i])
+    else:
+        S_max = stockage_hydro[index_pays]
+        h1 = p_pompage[index_pays]*T
+        h2 = p_turbinage[index_pays]*T
+        q4 = CyLPArray(np.transpose(r[index_pays,:]))
+        E = CyLPArray(np.transpose(C[index_pays,:]))
+    
+    d = CyLPArray(np.zeros(N_sites))
+    for i in range(N_sites):
+        d[i] = c[i]*P_max[i]
+    
+    #Variables
+    x = simplex.addVariable('x',N_sites,isInt=True) 
+    q1 = simplex.addVariable('q1',m)
+    q2 = simplex.addVariable('q2',m)
+    q3 = simplex.addVariable('q3',m) 
+    
+    simplex = CyClpSimplex()
+    
+    #Contraintes
+    simplex.addConstraint(0 <= x,"discontinuité 1")
+    simplex.addConstraint(x <= 2,"discontinuité 2")
+    simplex.addConstraint(0 <= q1)
+    simplex.addConstraint(q1 <= h1,"c1")
+    simplex.addConstraint(0 <= q2)
+    simplex.addConstraint(eta_turbinage*q2 <= h2,"c2")
+    
+    #Objectif
+    simplex.objective = d*x
+    
+    simplex.primal()
+    
+    print(simplex.getStatusString())
+    
+    return simplex.primalVariableSolution['x'],simplex.objectiveValue,simplex
 
 def main():
     res = model_1()
