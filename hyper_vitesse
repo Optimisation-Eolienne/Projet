@@ -48,15 +48,15 @@ cout_instal_offshore = 300336 # Coût *amorti sur un an* pour l'installation d'u
 P_max = CyLPArray(sites["capacites"])
 #flux des rivieres
 A = CyLPArray(np.zeros(N+1))
-for i in range(len(rivieres[0])//3):
+for i in range(N+1):
     for j in range(15):
-        A[i] += sum(rivieres[j][i*3: i*3 + 3])
-
+        A[i] += sum(rivieres[j,i*T:(i+1)*T])
+print(A.shape)
 #Consomation
 C = CyLPArray(np.zeros(N+1))
-for i in range(len(consommations[0])//3):
+for i in range(N+1):
     for j in range(15):
-        C[i] += sum(consommations[j][i*3: i*3 + 3])
+        C[i] += sum(consommations[j,i*T:(i+1)*T])
 
 
 
@@ -72,18 +72,20 @@ for i in range(N_sites):
         rendements[i,:] = rendements_onshore[i,:N_heures]
 
 #rendement
-c = CyLPArray(np.zeros(N_sites))
-for i in range(N_sites):
-    c[i] = np.sum(rendements[i,:])
-
+c = CyLPArray(np.zeros((N_sites,N+1)))
+for i in range(N+1):
+    for j in range(N_sites):
+        c[j,i] = np.sum(rendements[j,i*T:(i+1)*T])
+c = c.T
+print(c.shape)
 
 #vecteur de cout  
 cout = CyLPArray(np.zeros(N_sites))
 for i in range(N_sites):
     if(is_offshore[i]):
-        cout[i] = cout_instal_offshore
+        cout[i] = cout_instal_offshore*N_annees
     else:
-        cout[i] = cout_instal_onshore
+        cout[i] = cout_instal_onshore*N_annees 
 
 
 #|Model d'optimisation
@@ -94,10 +96,8 @@ def model_1():
     B = np.zeros((N + 1,N + 1))
     B[:,1:] = D[:,:-1]
     B = - CyLPArray(B.T)
-
-    
     hydro = sum(stockage_hydro)
-    demiBarage = hydro/2
+    #demiBarage = hydro/2
     
     #ajout d'un demi barage
     #A[0] += demiBarage
@@ -109,7 +109,7 @@ def model_1():
     FInMax = sum(p_pompage)*T
     
     FOutMax =  sum(p_turbinage)*T
-    
+    print("tttt  ",FOutMax)
     
     simplex = CyClpSimplex()
     
@@ -117,15 +117,14 @@ def model_1():
     P = simplex.addVariable('P',N_sites)
     F = simplex.addVariable('F',N+1) #F négatif lors les barages se remplissent
     
-    
     #Contraintes
-    simplex.addConstraint(0 <= P , "Positivité")
+    simplex.addConstraint(0 <= P , "Positivite")
     simplex.addConstraint(P <= P_max , "Bornes supérieures")
     simplex.addConstraint(F >= -FInMax , "Pompage max")
     simplex.addConstraint(F <= FOutMax , "Turbinage max")
-    simplex.addConstraint(0 <= (B*F + apportRivieres) - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
-    simplex.addConstraint(0 <= hydro - (B*F +  apportRivieres) + F , "Flux entrant plus petit que la capacité restante")
-    simplex.addConstraint(c*P + F >= C  , "Contraine sur la production minimal")
+    simplex.addConstraint(- apportRivieres <= B*F - F*eta_turbinage, "Flux sortant plus petit que la réserve") # + flux
+    simplex.addConstraint(hydro - apportRivieres >= B*F - F , "Flux entrant plus petit que la capacité restante")
+    simplex.addConstraint(c*P + F >= C , "Contraine sur la production minimal")
     #simplex.addConstraint( F.sum() + apportRivieres == demiBarage, "50% du barage à la fin")
     
     '''flux sortant : F <= somme flux précedent + riviere
@@ -133,13 +132,16 @@ def model_1():
     
     
     #Objectif
-    simplex.objective = cout*P*N_annees
-    
+    simplex.objective = cout*P
+
     simplex.primal()
-    
+    #print(simplex.getConstraintStatus("Turbinage max"))
+    #print(simplex.getConstraintStatus("Flux sortant plus petit que la réserve"))
+    print(simplex.getConstraintStatus("Flux entrant plus petit que la capacité restante"))
+    print(simplex.getConstraintStatus("Contraine sur la production minimal"))
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex
+    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex,simplex.primalVariableSolution['F']
 
 def model_2():
     ones =  np.ones((N + 1,N + 1))
@@ -147,7 +149,7 @@ def model_2():
     B = np.zeros((N + 1,N + 1))
     B[:,1:] = D[:,:-1]
     B = CyLPArray(B.T)
-    
+
     diag = np.diag(np.ones(N_sites))
     
     P_demi = P_max/2
@@ -180,7 +182,7 @@ def model_2():
     F = simplex.addVariable('F',N+1) #F négatif lors les barages se remplissent
     U = simplex.addVariable('U',N_sites, isInt = True)
     
-    
+    print(B)
     #Contraintes
     simplex.addConstraint(U >= 0, "discontinuité 1")
     simplex.addConstraint(U <= 2, "discontinuité 2")
@@ -194,8 +196,6 @@ def model_2():
     
     
     
-    
-    
     #Objectif
     simplex.objective = sigg*U*N_annees
     
@@ -206,9 +206,23 @@ def model_2():
     return simplex.primalVariableSolution['U'],simplex.objectiveValue,simplex
 
 
+ones =  np.ones((N + 1,N + 1))
+D = np.matrix(np.tril(ones).T)
+B = np.zeros((N + 1,N + 1))
+B[:,1:] = D[:,:-1]
+B = - CyLPArray(B.T)
+hydro = sum(stockage_hydro)
+apportRivieres = CyLPArray((A.T).dot(D).T)
+
+
 def main():
-    print(model_1()[1]*N_annees)
-    print()
+    #print(sum(c.dot(model_1()[0])) - C)
+    x = model_1()
+    print(sum(c.dot(x[0]) + x[3] - C))
+    print(sum(c.dot(x[0]) - C))
+    print(B.dot(x[3]) + apportRivieres)
+    print(B.dot(x[3]))
+    print(x[1])
     #model_1()
     
     
