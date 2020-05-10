@@ -1,4 +1,3 @@
-## imports classiques
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -17,14 +16,15 @@ N_heures = int(np.ceil(N_heures_par_annee*N_annees))
 
 T = 3
 m = int(np.floor(N_heures/T))
+t = np.linspace(0,N_heures,m)/N_heures_par_annee
 eta_turbinage = 0.75
 cout_instal_onshore  = 168903
 cout_instal_offshore = 300336
 
+index_pays = -1
 stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
 p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
 p_pompage = np.array([5223 , 3580 , 1307 , 0 , 5347 , 4303 , 292 , 7544 , 1100 , 1396 , 0 , 1029 , 2744 , 45 , 1636 ])
-
 
 #| Chargement des données
 
@@ -43,6 +43,18 @@ is_offshore = pd.Series(0,index=range(N_sites))
 is_offshore[sites["capacite offshore"]=="Oui"] = 1
 is_offshore = CyLPArray(is_offshore)
 
+apport_hydro_total = np.zeros((N_pays,m))
+for j in range(N_pays):
+    total = 0
+    for i in range(m):
+        total += np.sum(apports_hydro[j,i*T:(i+1)*T]) 
+        apport_hydro_total[j,i] = total
+
+consommation_par_periode = np.zeros((N_pays,m))
+for i in range(m):
+    for j in range(N_pays):
+        consommation_par_periode[j,i] = np.sum(consommations[j,i*T:(i+1)*T])
+
 A = np.matrix(np.zeros((m,N_sites)))
 for i in range(m):
     for j in range(N_sites):
@@ -53,39 +65,30 @@ for i in range(m):
 
 c = (cout_instal_offshore*is_offshore+cout_instal_onshore*(1-is_offshore))*N_annees
 
-r = np.zeros((N_pays,m))
-for i in range(m):
-    for j in range(N_pays):
-        r[j,i] = np.sum(apports_hydro[j,i*T:(i+1)*T])
-
-C = np.zeros((N_pays,m))
-for i in range(m):
-    for j in range(N_pays):
-        C[j,i] = np.sum(consommations[j,i*T:(i+1)*T])
-
 U = np.matrix(np.tril(np.ones((m,m))))
-D = np.matrix(np.tril(np.ones((m,m)),k=-1))
+
+if index_pays==-1:
+    S_max = np.sum(stockage_hydro)
+    h1 = np.sum(p_pompage)*T
+    h2 = np.sum(p_turbinage)*T
+    r = CyLPArray(np.zeros(m))
+    E = CyLPArray(np.zeros(m))
+    for i in range(m):
+        r[i] = np.sum(apport_hydro_total[:,i])
+        E[i] = np.sum(consommation_par_periode[:,i])
+else:
+    S_max = stockage_hydro[index_pays]
+    h1 = p_pompage[index_pays]*T
+    h2 = p_turbinage[index_pays]*T
+    r = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
+    E = CyLPArray(consommation_par_periode[index_pays,:])
+
 
 #| Modèle d'optimisation
 
-def model_1(index_pays=-1):
-    if index_pays==-1:
-        S_max = np.sum(stockage_hydro)
-        h1 = np.sum(p_pompage)*T
-        h2 = np.sum(p_turbinage)*T
-        q4 = np.zeros(m)
-        E = CyLPArray(np.zeros(m))
-        for i in range(m):
-            q4[i] = np.sum(r[:,i])
-            E[i] = np.sum(C[:,i])
-    else:
-        S_max = stockage_hydro[index_pays]
-        h1 = p_pompage[index_pays]*T
-        h2 = p_turbinage[index_pays]*T
-        q4 = CyLPArray(np.transpose(r[index_pays,:]))
-        E = CyLPArray(np.transpose(C[index_pays,:]))
+def model_1(theta=0.5):        
     
-    S_0 = 0
+    S_0 = theta*S_max
     
     simplex = CyClpSimplex()
     
@@ -95,51 +98,31 @@ def model_1(index_pays=-1):
     q2 = simplex.addVariable('q2',m)
     q3 = simplex.addVariable('q3',m)
     
-    v = CyLPArray(np.ones(m))
-    Q4 = CyLPArray(U@q4)
-    
     #Contraintes
-    simplex.addConstraint(0 <= P,"Positivité")
-    simplex.addConstraint(P <= P_max,"Bornes supérieures")
-    simplex.addConstraint(0 <= q1)
-    simplex.addConstraint(q1 <= h1,"c1")
-    simplex.addConstraint(0 <= q2)
-    simplex.addConstraint(eta_turbinage*q2 <= h2,"c2")
-    simplex.addConstraint(-S_0*v-Q4 <= U*(q1-q2))
-    simplex.addConstraint(U*(q1-q2) <= (S_max-S_0)*v-Q4,"c4")
-    simplex.addConstraint(q1+q3-A*P == 0,"cf2")
-    simplex.addConstraint(q3+eta_turbinage*q2 >= E,"cf")
-    simplex.addConstraint(q1.sum()-q2.sum()==-Q4[-1])
+    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
+    simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
+    simplex.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    simplex.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité du barrage positive")
+    simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
+    simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
+    simplex.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
     
     #Objectif
     simplex.objective = c*P
     
     simplex.primal()
-    
     print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['q2'],simplex.objectiveValue,simplex
 
-def model_2(index_pays=-1):
-    if index_pays==-1:
-        S_max = np.sum(stockage_hydro)
-        h1 = np.sum(p_pompage)*T
-        h2 = np.sum(p_turbinage)*T
-        q4 = np.zeros(m)
-        E = CyLPArray(np.zeros(m))
-        for i in range(m):
-            q4[i] = np.sum(r[:,i])
-            E[i] = np.sum(C[:,i])
-    else:
-        S_max = stockage_hydro[index_pays]
-        h1 = p_pompage[index_pays]*T
-        h2 = p_turbinage[index_pays]*T
-        q4 = CyLPArray(np.transpose(r[index_pays,:]))
-        E = CyLPArray(np.transpose(C[index_pays,:]))
+def model_2(theta=0.5):
+        
+    S_0 = theta*S_max
+    d = 1/2*c*P_max
+    B = 1/2*P_max*A
     
-    d = CyLPArray(np.zeros(N_sites))
-    for i in range(N_sites):
-        d[i] = c[i]*P_max[i]
+    simplex = CyClpSimplex()
     
     #Variables
     x = simplex.addVariable('x',N_sites,isInt=True) 
@@ -147,28 +130,43 @@ def model_2(index_pays=-1):
     q2 = simplex.addVariable('q2',m)
     q3 = simplex.addVariable('q3',m) 
     
-    simplex = CyClpSimplex()
-    
     #Contraintes
-    simplex.addConstraint(0 <= x,"discontinuité 1")
-    simplex.addConstraint(x <= 2,"discontinuité 2")
-    simplex.addConstraint(0 <= q1)
-    simplex.addConstraint(q1 <= h1,"c1")
-    simplex.addConstraint(0 <= q2)
-    simplex.addConstraint(eta_turbinage*q2 <= h2,"c2")
+    simplex.addConstraint(0 <= x <= 2,"Bornes sur la proportion de puissance installée")
+    simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
+    simplex.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    simplex.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité minimale du barrage")
+    simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
+    simplex.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
+    simplex.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
     
     #Objectif
     simplex.objective = d*x
     
     simplex.primal()
-    
     print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['x'],simplex.objectiveValue,simplex
 
+def plotModel_Consommation(result):
+    s = result[2]
+    E_prod = s.primalVariableSolution['q2']+s.primalVariableSolution['q3']
+    
+    fig = plt.figure(figsize=(16,3))
+    g = fig.add_subplot(1,1,1)
+    g.set_title("Graphique de l'énergie produite et consommée en fonction du temps")
+    g.set_ylabel("Energie [MWh]")
+    g.set_xlabel("Temps [année]")
+    g.plot(t,E_prod,label="Energie produite")
+    g.plot(t,E,label="Energie consommée")
+    
+    plt.legend()
+    plt.show()
+    
+
 def main():
     res = model_1()
-    print(res[0])
+    plotModel_Consommation(res)
     print(res[1])
     
 main()
