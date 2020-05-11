@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
 from cylp.cy import CyClpSimplex
-from cylp.py.modeling.CyLPModel import CyLPArray
+from cylp.py.modeling.CyLPModel import CyLPModel,CyLPArray
 
 
 #| Paramètres
@@ -114,7 +114,7 @@ def model_1(theta=0.5):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['q2'],simplex.objectiveValue,simplex
+    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex
 
 def model_2(theta=0.5):
         
@@ -122,35 +122,37 @@ def model_2(theta=0.5):
     d = 1/2*c*P_max
     B = 1/2*P_max*A
     
-    simplex = CyClpSimplex()
+    model = CyLPModel()
     
     #Variables
-    x = simplex.addVariable('x',N_sites,isInt=True) 
-    q1 = simplex.addVariable('q1',m)
-    q2 = simplex.addVariable('q2',m)
-    q3 = simplex.addVariable('q3',m) 
-    
+    x = model.addVariable('x',N_sites,isInt=True) 
+    q1 = model.addVariable('q1',m)
+    q2 = model.addVariable('q2',m)
+    q3 = model.addVariable('q3',m)
+      
     #Contraintes
-    simplex.addConstraint(0 <= x <= 2,"Bornes sur la proportion de puissance installée")
-    simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
-    simplex.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
-    simplex.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité minimale du barrage")
-    simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
-    simplex.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
-    simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
-    simplex.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
+    model.addConstraint(0 <= x <= 2,"Bornes sur la proportion de puissance installée")
+    model.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
+    model.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    model.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité minimale du barrage")
+    model.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
+    model.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
+    model.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
+    model.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
     
     #Objectif
-    simplex.objective = d*x
+    model.objective = d*x
     
-    simplex.primal()
+    simplex = CyClpSimplex(model)
+    cbcModel = simplex.getCbcModel()
+    cbcModel.branchAndBound()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['x'],simplex.objectiveValue,simplex
+    return cbcModel.primalVariableSolution['x'],cbcModel.objectiveValue,cbcModel
 
 def plotModel_Consommation(result):
     s = result[2]
-    E_prod = s.primalVariableSolution['q2']+s.primalVariableSolution['q3']
+    E_prod = eta_turbinage*s.primalVariableSolution['q2']+s.primalVariableSolution['q3']
     
     fig = plt.figure(figsize=(16,3))
     g = fig.add_subplot(1,1,1)
