@@ -28,6 +28,7 @@ stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e
 p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
 p_pompage = np.array([5223 , 3580 , 1307 , 0 , 5347 , 4303 , 292 , 7544 , 1100 , 1396 , 0 , 1029 , 2744 , 45 , 1636 ])
 
+
 #| Chargement des données
 
 consommations = np.genfromtxt('Consommations.csv', delimiter=',')[:,:N_heures]
@@ -72,17 +73,17 @@ U = np.matrix(np.tril(np.ones((m,m))))
 if index_pays==-1:
     S_max = np.sum(stockage_hydro)
     h1 = np.sum(p_pompage)*T
-    h2 = np.sum(p_turbinage)*T
-    r = CyLPArray(np.zeros(m))
+    h2 = 1/eta_turbinage*np.sum(p_turbinage)*T
+    R = CyLPArray(np.zeros(m))
     E = CyLPArray(np.zeros(m))
     for i in range(m):
-        r[i] = np.sum(apport_hydro_total[:,i])
+        R[i] = np.sum(apport_hydro_total[:,i])
         E[i] = np.sum(consommation_par_periode[:,i])
 else:
     S_max = stockage_hydro[index_pays]
     h1 = p_pompage[index_pays]*T
-    h2 = p_turbinage[index_pays]*T
-    r = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
+    h2 = 1/eta_turbinage*p_turbinage[index_pays]*T
+    R = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
     E = CyLPArray(consommation_par_periode[index_pays,:])
 
 
@@ -96,20 +97,20 @@ def model_1(theta=0.5):
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    q1 = simplex.addVariable('q1',m)
-    q2 = simplex.addVariable('q2',m)
-    q3 = simplex.addVariable('q3',m)
+    q1 = simplex.addVariable('q1',m) # eoliennes->barrage
+    q2 = simplex.addVariable('q2',m) # barrage->production
+    q3 = simplex.addVariable('q3',m) # eoliennes->production
     
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
-    simplex.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
     simplex.addConstraint(0 <= q3)
-    simplex.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité du barrage positive")
-    simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
-    simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
     simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
-    simplex.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
+    simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(- S_0 - R <= U*(q1 - q2),"Capacité du barrage positive")
+    simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - R,"Capacité maximale du barrage")
+    simplex.addConstraint(q2.sum() - q1.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
     simplex.objective = c*P
@@ -117,7 +118,7 @@ def model_1(theta=0.5):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex
+    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex,theta
 
 def model_2(theta=0.5):
         
@@ -129,19 +130,19 @@ def model_2(theta=0.5):
     
     #Variables
     x = model.addVariable('x',N_sites,isInt=True) 
-    q1 = model.addVariable('q1',m)
-    q2 = model.addVariable('q2',m)
-    q3 = model.addVariable('q3',m)
+    q1 = model.addVariable('q1',m) # eoliennes->barrage
+    q2 = model.addVariable('q2',m) # barrage->production
+    q3 = model.addVariable('q3',m) # eoliennes->production
       
     #Contraintes
     model.addConstraint(0 <= x <= 2,"Bornes sur la proportion de puissance installée")
     model.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
-    model.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    model.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
     model.addConstraint(0 <= q3)
-    model.addConstraint(- S_0 - r <= U*(q1 - q2),"Capacité minimale du barrage")
-    model.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
     model.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
     model.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
+    model.addConstraint(- S_0 - R <= U*(q1 - q2),"Capacité minimale du barrage")
+    model.addConstraint(U*(q1 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
     model.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
     
     #Objectif
@@ -152,7 +153,7 @@ def model_2(theta=0.5):
     cbcModel.branchAndBound()
     print(simplex.getStatusString())
     
-    return cbcModel.primalVariableSolution['x'],cbcModel.objectiveValue,cbcModel
+    return cbcModel.primalVariableSolution['x'],cbcModel.objectiveValue,cbcModel,theta
 
 def model_3(theta=0.5):        
     
@@ -176,7 +177,7 @@ def model_3(theta=0.5):
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
-    simplex.addConstraint(0 <= q2 <= 1/eta_turbinage*h2,"Bornes sur le transfert Barrage->Production")
+    simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
     simplex.addConstraint(0 <= q3)
     simplex.addConstraint(0 <= q4)
     simplex.addConstraint(0 <= q5)
@@ -185,12 +186,12 @@ def model_3(theta=0.5):
         simplex.addConstraint(U[i] - G <= 0)
     simplex.addConstraint(0 <= U)
     
-    simplex.addConstraint(- S_0 - r <= U*(q1 + q4 - q2),"Capacité du barrage positive")
-    simplex.addConstraint(U*(q1 + q4 - q2) <= S_max - S_0 - r,"Capacité maximale du barrage")
+    simplex.addConstraint(- S_0 - R <= U*(q1 + q4 - q2),"Capacité du barrage positive")
+    simplex.addConstraint(U*(q1 + q4 - q2) <= S_max - S_0 - R,"Capacité maximale du barrage")
     simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
     simplex.addConstraint(q4 + q5 - U == 0)
     simplex.addConstraint(q3 + q5 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
-    simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == r[-1],"Stockage initial et final identique")
+    simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
     simplex.objective = c*P + s*G + cout_fonct_gaz*U.sum()
@@ -198,7 +199,7 @@ def model_3(theta=0.5):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['U'],simplex.objectiveValue,simplex
+    return simplex.primalVariableSolution['U'],simplex.objectiveValue,simplex,theta
 
 def plotModel_Consommation(result,model=1):
     s = result[2]
@@ -207,21 +208,64 @@ def plotModel_Consommation(result,model=1):
     if model==3:
         E_prod = eta_turbinage*s.primalVariableSolution['q2']+s.primalVariableSolution['q3']+s.primalVariableSolution['q5']
     
+    E_prod_tot = np.sum(E_prod)
+    E_tot =  np.sum(E)
+    
     fig = plt.figure(figsize=(16,3))
     g = fig.add_subplot(1,1,1)
     g.set_title("Graphique de l'énergie produite et consommée en fonction du temps")
-    g.set_ylabel("Energie [MWh]")
+    g.set_ylabel("Energie [TWh]")
     g.set_xlabel("Temps [année]")
-    g.plot(t,E_prod,label="Energie produite")
-    g.plot(t,E,label="Energie consommée")
+    g.plot(t,E_prod*10**(-6),label="Energie produite")
+    g.plot(t,E*10**(-6),label="Energie consommée")
     
     plt.legend()
     plt.show()
+    
+    print("Energie totale produite : {:.0f} [MWh]".format(E_prod_tot))
+    print("Proportion de l'énergie produite qui n'a pas été consomée : {:.2f}%".format(100*(E_prod_tot-E_tot)/E_prod_tot))
+    
+    
+def plotModel_Energie(result,model=1):
+    pass
+    
+def plotModel_Barrage(result,model=1):
+    s = result[2]
+    E_eolienne_stock = np.zeros(m)
+    total = 0
+    for i in range(m):
+        total += s.primalVariableSolution['q1'][i]
+        E_eolienne_stock[i] = total
+    if model==1:
+        S = (U@s.primalVariableSolution['q1'] - U@s.primalVariableSolution['q2'] + R).T
+    S += result[3]*S_max
+    
+    fig = plt.figure(figsize=(16,6))
+    plt.subplots_adjust(hspace=0.5)
+    g1 = fig.add_subplot(2,1,1)
+    g2 = fig.add_subplot(2,1,2)
+    
+    g1.set_title("Graphique représentant l'énergie stockée dans le barrage en fonction du temps")
+    g1.set_ylabel("Energie [TWh]")
+    g1.set_xlabel("Temps [année]")
+    g1.plot(t,S*10**(-6))
+    
+    g2.set_title("Graphique de l'évolution du stockage cumulé des différentes énergies en fonction du temps")
+    g2.set_ylabel("Energie [TWh]")
+    g2.set_xlabel("Temps [année]")
+    g2.plot(t,E_eolienne_stock*10**(-6),label="Energie éolienne stockée")
+    g2.plot(t,R*10**(-6),label="Energie stockée provennant des cours d'eau")
+    
+    plt.legend()
+    plt.show()
+    
+def plotModel_Time():
+    pass
 
 def main():
-    res = model_3()
-    plotModel_Consommation(res,model=3)
-    print(res[0])
+    res = model_1()
+    plotModel_Consommation(res,model=1)
+    plotModel_Barrage(res,model=1)
     print(res[1])
     
 main()
