@@ -27,7 +27,8 @@ index_pays = -1
 stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
 p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
 p_pompage = np.array([5223 , 3580 , 1307 , 0 , 5347 , 4303 , 292 , 7544 , 1100 , 1396 , 0 , 1029 , 2744 , 45 , 1636 ])
-
+liste_pays = ['Allemagne','Autriche','Belgique','Danemark','Espagne','France','Irlande','Italie','Luxembourg',\
+             'Norvège','Pays-Bas','Portugal','Royaume-Uni','Suède','Suisse']
 
 #| Chargement des données
 
@@ -262,37 +263,66 @@ def plotModel_Barrage(result,model=1):
 def plotModel_Time():
     pass
 
-def model_1b(index_pays, theta=0.5):        
+def model_1b(index_pays, theta=0.5):  
+    pays = liste_pays[index_pays]
     
+    #Adaptation de P_max      
+    dans_le_pays = pd.Series(0,index=range(N_sites))
+    dans_le_pays[sites["pays"]==pays] = 1
+    dans_le_pays = CyLPArray(dans_le_pays)
+    P_max_loc = []
+    for i in range(N_sites):
+        if(dans_le_pays[i]):
+            P_max_loc.append(P_max[i])
+    P_max_loc = CyLPArray(P_max_loc)
+    N_sites_loc = dans_le_pays.sum()
+    
+    #Adaptation de la matrice des rendements
+    new_A = np.matrix(np.zeros((m,N_sites_loc)))
+    col = 0
+    for i in range(N_sites):
+        if(dans_le_pays[i]):
+            new_A[:,col] = A[:,i]
+            col += 1
+    
+    #Adaptation des couts
+    new_cout = []
+    for i in range(N_sites):
+        if(dans_le_pays[i]):
+            new_cout.append(c[i])
+    new_cout = CyLPArray(new_cout)
+    
+    #VAriable adapté au pays
     S_max = stockage_hydro[index_pays]
     h1 = p_pompage[index_pays]*T
     h2 = 1/eta_turbinage*p_turbinage[index_pays]*T
     R = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
     E = CyLPArray(consommation_par_periode[index_pays,:])
     
+    #Barage au début
     S_0 = theta*S_max
     
     simplex = CyClpSimplex()
     
     #Variables
-    P = simplex.addVariable('P',N_sites)
+    P = simplex.addVariable('P',N_sites_loc)   #TODO
     q1 = simplex.addVariable('q1',m) # eoliennes->barrage
     q2 = simplex.addVariable('q2',m) # barrage->production
     q3 = simplex.addVariable('q3',m) # eoliennes->production
     
     #Contraintes
-    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
+    simplex.addConstraint(0 <= P <= P_max_loc,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
     simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
     simplex.addConstraint(0 <= q3)
     simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
-    simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(q1 + q3 - new_A*P == 0,"Conservation de l'énergie produite par les éoliennes")
     simplex.addConstraint(- S_0 - R <= U*(q1 - q2),"Capacité du barrage positive")
     simplex.addConstraint(U*(q1 - q2) <= S_max - S_0 - R,"Capacité maximale du barrage")
     simplex.addConstraint(q2.sum() - q1.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
-    simplex.objective = c*P
+    simplex.objective = new_cout*P
     
     simplex.primal()
     print(simplex.getStatusString())
@@ -301,7 +331,7 @@ def model_1b(index_pays, theta=0.5):
 
 
 def main():
-    res = model_1b(1)
+    res = model_1b(0)
     plotModel_Consommation(res,model=1)
     plotModel_Barrage(res,model=1)
     print(res[1])
