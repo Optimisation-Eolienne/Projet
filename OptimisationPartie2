@@ -21,7 +21,7 @@ eta_turbinage = 0.75
 cout_instal_onshore  = 168903
 cout_instal_offshore = 300336
 cout_amorti_gaz = 94956
-cout_fonct_gaz  = 65
+cout_fonct_gaz  = 65*T
 
 index_pays = -1
 stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
@@ -168,7 +168,7 @@ def model_3(theta=0.5):
     #Variables
     P = simplex.addVariable('P',N_sites)
     G = simplex.addVariable('G',1)
-    U = simplex.addVariable('U',m)
+    Utilisation = simplex.addVariable('Utilisation',m)
     q1 = simplex.addVariable('q1',m) # eoliennes->barrage
     q2 = simplex.addVariable('q2',m) # barrage->production
     q3 = simplex.addVariable('q3',m) # eoliennes->production
@@ -184,23 +184,26 @@ def model_3(theta=0.5):
     simplex.addConstraint(0 <= q5)
     
     for i in range(m):
-        simplex.addConstraint(U[i] - G <= 0)
-    simplex.addConstraint(0 <= U)
+        simplex.addConstraint(Utilisation[i] - G <= 0)
+    simplex.addConstraint(0 <= Utilisation)
+    
     
     simplex.addConstraint(- S_0 - R <= U*(q1 + q4 - q2),"Capacité du barrage positive")
     simplex.addConstraint(U*(q1 + q4 - q2) <= S_max - S_0 - R,"Capacité maximale du barrage")
     simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
-    simplex.addConstraint(q4 + q5 - U == 0)
-    simplex.addConstraint(q3 + q5 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
+    simplex.addConstraint(q4 + q5 - Utilisation == 0)
+    simplex.addConstraint(q3 + q5 + q2*eta_turbinage >= E,"Demande d'énergie satisfaite")
     simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
+    
+    
     #Objectif
-    simplex.objective = c*P + s*G + cout_fonct_gaz*U.sum()
+    simplex.objective = c*P + s*G + cout_fonct_gaz*Utilisation.sum()
     
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['U'],simplex.objectiveValue,simplex,theta
+    return simplex.primalVariableSolution['Utilisation'],simplex.objectiveValue,simplex,theta
 
 def plotModel_Consommation(result,model=1):
     s = result[2]
@@ -331,9 +334,9 @@ def model_1b(index_pays, theta=0.5):
 
 
 def main():
-    res = model_1b(0)
-    plotModel_Consommation(res,model=1)
+    res = model_3()
+    plotModel_Consommation(res,model=3)
     plotModel_Barrage(res,model=1)
-    print(res[1])
+    print(res[2].primalVariableSolution['Utilisation'])
     
 main()
