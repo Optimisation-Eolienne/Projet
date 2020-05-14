@@ -138,8 +138,8 @@ def model_2(theta=0.5):
     model.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
     model.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
     model.addConstraint(- S_0 - R <= L*q1 - L*q2,"Capacité minimale du barrage")
-    model.addConstraint(L*q1 - L*q2 <= S_max - S_0 - r,"Capacité maximale du barrage")
-    model.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
+    model.addConstraint(L*q1 - L*q2 <= S_max - S_0 - R,"Capacité maximale du barrage")
+    model.addConstraint(q2.sum() - q1.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
     model.objective = d*x
