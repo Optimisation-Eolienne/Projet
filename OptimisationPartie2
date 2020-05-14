@@ -297,8 +297,24 @@ def plotModel_Barrage(result,model=1):
     plt.legend()
     plt.show()
     
-def plotModel_Time():
-    pass
+def plotModel_Time(data):
+    fig = plt.figure(figsize=(10,4))
+    fig.suptitle("Temps d'exécution en fonction du nombre d'années considérées")
+    fig.subplots_adjust(wspace=0.25,top=0.84)
+    g1 = fig.add_subplot(1,2,1)
+    g2 = fig.add_subplot(1,2,2)
+    
+    g1.set_title("Algorithme du simplexe primal")
+    g1.set_xlabel("Période de résolution du modèle [année]")
+    g1.set_ylabel("Temps d'exécution [s]")
+    g1.scatter(data['input_size'],data['primal_time'])
+    
+    g2.set_title("Algorithme du simplexe dual")
+    g2.set_xlabel("Période de résolution du modèle [année]")
+    g2.set_ylabel("Temps d'exécution [s]")
+    g2.scatter(data['input_size'],data['dual_time'])
+    
+    plt.show()
 
 def model_1b(index_pays, theta=0.5):  
     pays = liste_pays[index_pays]
