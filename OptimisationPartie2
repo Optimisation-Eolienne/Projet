@@ -21,7 +21,7 @@ eta_turbinage = 0.75
 cout_instal_onshore  = 168903
 cout_instal_offshore = 300336
 cout_amorti_gaz = 94956
-cout_fonct_gaz  = 65*T
+cout_fonct_gaz  = 65
 
 stockage_hydro = CyLPArray([0.3*1e6 , 3.2*1e6 , 0.01*1e6 , 0 , 18.4*1e6 , 9.8*1e6 , 0.24*1e6 , 7.9*1e6 , 0.005*1e6 , 84.147*1e6 , 0 , 2.6*1e6 , 1.2*1e6 , 33.756*1e6 , 8.4*1e6])
 p_turbinage = np.array([8587 , 12009 , 1417 , 9 , 18372 , 25132 , 527 , 21117 , 1140 , 28941 , 37 , 5052 , 4269 , 16637 , 15101])
@@ -71,7 +71,7 @@ c = (cout_instal_offshore*is_offshore+cout_instal_onshore*(1-is_offshore))*N_ann
 L = np.matrix(np.tril(np.ones((m,m))))
 
 
-#| Données du modèle européen agrégé
+#| Données du modèles agrégé
 
 S_max = np.sum(stockage_hydro)
 h1 = np.sum(p_pompage)*T
@@ -111,7 +111,7 @@ def model_1(theta=0.5):
     #Objectif
     simplex.objective = c*P
     
-    simplex.primal()
+    simplex.dual()
     print(simplex.getStatusString())
     
     return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex,theta
@@ -147,11 +147,10 @@ def model_2(theta=0.5):
     simplex = CyClpSimplex(model)
     cbcModel = simplex.getCbcModel()
     cbcModel.branchAndBound()
-    print(cbcModel.getStatusString())
     
     return cbcModel.primalVariableSolution['x'],cbcModel.objectiveValue,cbcModel,theta
 
-def model_3(index_pays, theta=0.5):  
+def model_3(index_pays,theta=0.5):  
     
     #Adaptation des données
     pays = liste_pays[index_pays]
@@ -163,7 +162,7 @@ def model_3(index_pays, theta=0.5):
     S_max = stockage_hydro[index_pays]
     h1 = p_pompage[index_pays]*T
     h2 = 1/eta_turbinage*p_turbinage[index_pays]*T
-    R = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
+    R = CyLPArray(apport_hydro_total[index_pays,:])
     E = CyLPArray(consommation_par_periode[index_pays,:])
     
     S_0 = theta*S_max
@@ -193,9 +192,9 @@ def model_3(index_pays, theta=0.5):
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex,theta
+    return simplex.primalVariableSolution['P'],simplex.objectiveValue,simplex,theta,index_pays
 
-def model_4(index_pays, theta=0.5):        
+def model_4(index_pays,theta=0.5):        
     
     #Adaptation des données
     pays = liste_pays[index_pays]  
@@ -204,8 +203,7 @@ def model_4(index_pays, theta=0.5):
     A2 = np.matrix(pd.DataFrame(A).loc[:,sites["pays"]==pays])
     N_sites2 = len(P_max2)
     
-    #VAriable adapté au pays
-    S_max = stockage_hydro[index_pays]*2
+    S_max = stockage_hydro[index_pays]
     h1 = p_pompage[index_pays]*T
     h2 = 1/eta_turbinage*p_turbinage[index_pays]*T
     R = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
@@ -213,15 +211,15 @@ def model_4(index_pays, theta=0.5):
     
     S_0 = theta*S_max
     
-    s = cout_amorti_gaz*N_annees
-    V = eta_turbinage*np.matrix(np.diag(np.ones(m)))
+    d1 = cout_amorti_gaz*N_annees
+    d2 = cout_fonct_gaz*T
     
     simplex = CyClpSimplex()
     
     #Variables
-    P = simplex.addVariable('P',N_sites_loc)
+    P = simplex.addVariable('P',N_sites2)
     G = simplex.addVariable('G',1)
-    Utilisation = simplex.addVariable('Utilisation',m)
+    u = simplex.addVariable('u',m)
     q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
     q2 = simplex.addVariable('q2',m) # Barrage->Production
     q3 = simplex.addVariable('q3',m) # Eoliennes->Production
@@ -229,42 +227,47 @@ def model_4(index_pays, theta=0.5):
     q5 = simplex.addVariable('q5',m) # Centrale->Production
     
     #Contraintes
-    simplex.addConstraint(0 <= P <= P_max_loc,"Bornes sur les puissances installées")
+    simplex.addConstraint(0 <= P <= P_max2,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
     simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
     simplex.addConstraint(0 <= q3,"Bornes sur le transfert Eoliennes->Production")
-    simplex.addConstraint(0 <= q4)
-    simplex.addConstraint(0 <= q5)
+    simplex.addConstraint(0 <= q4,"Bornes sur le transfert Centrale->Barrage")
+    simplex.addConstraint(0 <= q5,"Bornes sur le transfert Centrale->Production")
     
     for i in range(m):
-        simplex.addConstraint(Utilisation[i] - G <= 0)
-    simplex.addConstraint(0 <= Utilisation)
+        simplex.addConstraint(u[i] - G <= 0)
+    simplex.addConstraint(0 <= u)
     
     
-    simplex.addConstraint(- S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
+    simplex.addConstraint(-S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
     simplex.addConstraint(L*q1 - L*q2 <= S_max - S_0 - R,"Capacité maximale du barrage")
-    simplex.addConstraint(q1 + q3 - new_A*P == 0,"Conservation de l'énergie produite par les éoliennes")
-    simplex.addConstraint(q4 + q5 - Utilisation == 0)
+    simplex.addConstraint(q1 + q3 - A2*P == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(q4 + q5 - u == 0)
     simplex.addConstraint(E <= eta_turbinage*q2 + q3 + q5,"Demande d'énergie satisfaite")
     simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
-    simplex.objective = new_cout*P + s*G + cout_fonct_gaz*Utilisation.sum()
+    simplex.objective = c2*P + d1*G + d2*u.sum()
     
     simplex.primal()
     print(simplex.getStatusString())
     
-    return simplex.primalVariableSolution['Utilisation'],simplex.objectiveValue,simplex,theta
+    return simplex.primalVariableSolution['u'],simplex.objectiveValue,simplex,theta,index_pays
 
-def plotModel_Consommation(result,model=1):
+def plotModel_Consommation(result,model):
     s = result[2]
-    if model==1:
+    if model==1 or model==2:
         E_prod = eta_turbinage*s.primalVariableSolution['q2']+s.primalVariableSolution['q3']
+        E_cons = E
     if model==3:
+        E_prod = eta_turbinage*s.primalVariableSolution['q2']+s.primalVariableSolution['q3']
+        E_cons = consommation_par_periode[result[4],:] 
+    if model==4:
         E_prod = eta_turbinage*s.primalVariableSolution['q2']+s.primalVariableSolution['q3']+s.primalVariableSolution['q5']
+        E_cons = consommation_par_periode[result[4],:] 
     
     E_prod_tot = np.sum(E_prod)
-    E_tot =  np.sum(E)
+    E_cons_tot = np.sum(E_cons)
     
     fig = plt.figure(figsize=(16,3))
     g = fig.add_subplot(1,1,1)
@@ -272,28 +275,31 @@ def plotModel_Consommation(result,model=1):
     g.set_ylabel("Energie [TWh]")
     g.set_xlabel("Temps [année]")
     g.plot(t,E_prod*10**(-6),label="Energie produite")
-    g.plot(t,E*10**(-6),label="Energie consommée")
+    g.plot(t,E_cons*10**(-6),label="Energie consommée")
     
     plt.legend()
     plt.show()
     
     print("Energie totale produite : {:.0f} [MWh]".format(E_prod_tot))
-    print("Proportion de l'énergie produite qui n'a pas été consomée : {:.2f}%".format(100*(E_prod_tot-E_tot)/E_prod_tot))
+    print("Proportion de l'énergie produite qui n'a pas été consommée : {:.2f}%".format(100*(E_prod_tot-E_cons_tot)/E_prod_tot))
     
     
-def plotModel_Energie(result,model=1):
+def plotModel_Energie(result,model):
     pass
     
-def plotModel_Barrage(result,model=1):
+def plotModel_Barrage(result,model):
     s = result[2]
-    E_eolienne_stock = np.zeros(m)
-    total = 0
-    for i in range(m):
-        total += s.primalVariableSolution['q1'][i]
-        E_eolienne_stock[i] = total
-    if model==1:
-        S = (L@s.primalVariableSolution['q1'] - L@s.primalVariableSolution['q2'] + R).T
-    S += result[3]*S_max
+    E_eolienne_stock = np.array(L)@s.primalVariableSolution['q1']
+    if model==1 or model==2:
+        apport_hydro_stock = R
+        S =  np.array(L)@(s.primalVariableSolution['q1']-s.primalVariableSolution['q2']) + apport_hydro_stock
+        S += result[3]*S_max
+    if model==3 or model==4:
+        apport_hydro_stock = apport_hydro_total[result[4],:]
+        S = np.array(L)@(s.primalVariableSolution['q1']-s.primalVariableSolution['q2']) + apport_hydro_stock
+        if model==4:
+            S += np.array(L)@s.primalVariableSolution['q4']
+        S += result[3]*stockage_hydro[result[4]]
     
     fig = plt.figure(figsize=(16,6))
     plt.subplots_adjust(hspace=0.5)
@@ -309,31 +315,52 @@ def plotModel_Barrage(result,model=1):
     g2.set_ylabel("Energie [TWh]")
     g2.set_xlabel("Temps [année]")
     g2.plot(t,E_eolienne_stock*10**(-6),label="Energie éolienne stockée")
-    g2.plot(t,R*10**(-6),label="Energie stockée provennant des cours d'eau")
+    g2.plot(t,10**(-6)*apport_hydro_stock,label="Energie stockée provennant des cours d'eau")
     
     plt.legend()
     plt.show()
     
+def plotModel_StockageInitial(theta_min,theta_max,theta_step):
+    theta= np.arange(theta_min,theta_max+theta_step,theta_step)
+    objectiveValue = np.zeros(len(theta))
+    for i in range(len(theta)):
+        objectiveValue[i] = model_1(theta[i])[1]
+    
+    fig = plt.figure(figsize=(10,6))
+    g = fig.add_subplot(1,1,1)
+    g.set_title("Variation du coût total de production en fonction du stockage initial")
+    g.set_ylabel("Coût de production (en €)")
+    g.set_xlabel("theta [/]")
+    g.scatter(theta,objectiveValue)
+    
+    plt.show()
+    
 def plotModel_Time(data):
-    fig = plt.figure(figsize=(10,4))
+    fig = plt.figure(figsize=(10,5))
     fig.suptitle("Temps d'exécution en fonction du nombre d'années considérées")
-    fig.subplots_adjust(wspace=0.25,top=0.84)
+    fig.subplots_adjust(wspace=0.4,top=0.84)
     g1 = fig.add_subplot(1,2,1)
     g2 = fig.add_subplot(1,2,2)
     
     g1.set_title("Algorithme du simplexe primal")
     g1.set_xlabel("Période de résolution du modèle [année]")
     g1.set_ylabel("Temps d'exécution [s]")
+    g1.set_ylim(top=500)
     g1.scatter(data['input_size'],data['primal_time'])
     
     g2.set_title("Algorithme du simplexe dual")
     g2.set_xlabel("Période de résolution du modèle [année]")
     g2.set_ylabel("Temps d'exécution [s]")
+    g2.set_ylim(top=500)
     g2.scatter(data['input_size'],data['dual_time'])
     
     plt.show()
 
 def main():
-    model_2()
+    result = model_4(1)
+    print(result[1])
+    plotModel_Consommation(result,4)
+    plotModel_Barrage(result,4)
+    plotModel_StockageInitial(0,1,0.1)
     
 main()
