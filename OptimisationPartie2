@@ -93,15 +93,15 @@ def model_1(theta=0.5):
     
     #Variables
     P = simplex.addVariable('P',N_sites)
-    q1 = simplex.addVariable('q1',m) # eoliennes->barrage
-    q2 = simplex.addVariable('q2',m) # barrage->production
-    q3 = simplex.addVariable('q3',m) # eoliennes->production
+    q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
+    q2 = simplex.addVariable('q2',m) # Barrage->Production
+    q3 = simplex.addVariable('q3',m) # Eoliennes->Production
     
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
-    simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
+    simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eoliennes->Barrage")
     simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
-    simplex.addConstraint(0 <= q3)
+    simplex.addConstraint(0 <= q3,"Bornes sur le transfert Eoliennes->Production")
     simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
     simplex.addConstraint(q1 + q3 - A*P == 0,"Conservation de l'énergie produite par les éoliennes")
     simplex.addConstraint(- S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
@@ -126,19 +126,19 @@ def model_2(theta=0.5):
     
     #Variables
     x = model.addVariable('x',N_sites,isInt=True) 
-    q1 = model.addVariable('q1',m) # eoliennes->barrage
-    q2 = model.addVariable('q2',m) # barrage->production
-    q3 = model.addVariable('q3',m) # eoliennes->production
+    q1 = model.addVariable('q1',m) # Eoliennes->Barrage
+    q2 = model.addVariable('q2',m) # Barrage->Production
+    q3 = model.addVariable('q3',m) # Eoliennes->Production
       
     #Contraintes
     model.addConstraint(0 <= x <= 2,"Bornes sur la proportion de puissance installée")
     model.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
     model.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
-    model.addConstraint(0 <= q3)
+    model.addConstraint(0 <= q3,"Bornes sur le transfert Eoliennes->Production")
     model.addConstraint(q1 + q3 - B*x == 0,"Conservation de l'énergie produite par les éoliennes")
     model.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
     model.addConstraint(- S_0 - R <= L*q1 - L*q2,"Capacité minimale du barrage")
-    model.addConstraint(L*q1 - L*q2) <= S_max - S_0 - R,"Capacité maximale du barrage")
+    model.addConstraint(L*q1 - L*q2 <= S_max - S_0 - r,"Capacité maximale du barrage")
     model.addConstraint(q2.sum() - q1.sum() == r[-1],"Stockage initial et final identique")
     
     #Objectif
@@ -172,15 +172,15 @@ def model_3(index_pays, theta=0.5):
     
     #Variables
     P = simplex.addVariable('P',N_sites2)
-    q1 = simplex.addVariable('q1',m) # eoliennes->barrage
-    q2 = simplex.addVariable('q2',m) # barrage->production
-    q3 = simplex.addVariable('q3',m) # eoliennes->production
+    q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
+    q2 = simplex.addVariable('q2',m) # Barrage->Production
+    q3 = simplex.addVariable('q3',m) # Eoliennes->Production
     
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max2,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
     simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
-    simplex.addConstraint(0 <= q3)
+    simplex.addConstraint(0 <= q3,"Bornes sur le transfert Eoliennes->Production")
     simplex.addConstraint(q3 + eta_turbinage*q2 >= E,"Demande d'énergie satisfaite")
     simplex.addConstraint(q1 + q3 - A2*P == 0,"Conservation de l'énergie produite par les éoliennes")
     simplex.addConstraint(- S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
@@ -222,17 +222,17 @@ def model_4(index_pays, theta=0.5):
     P = simplex.addVariable('P',N_sites_loc)
     G = simplex.addVariable('G',1)
     Utilisation = simplex.addVariable('Utilisation',m)
-    q1 = simplex.addVariable('q1',m) # eoliennes->barrage
-    q2 = simplex.addVariable('q2',m) # barrage->production
-    q3 = simplex.addVariable('q3',m) # eoliennes->production
-    q4 = simplex.addVariable('q4',m) # usine->barrage
-    q5 = simplex.addVariable('q5',m) # usine->production
+    q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
+    q2 = simplex.addVariable('q2',m) # Barrage->Production
+    q3 = simplex.addVariable('q3',m) # Eoliennes->Production
+    q4 = simplex.addVariable('q4',m) # Centrale->Barrage
+    q5 = simplex.addVariable('q5',m) # Centrale->Production
     
     #Contraintes
     simplex.addConstraint(0 <= P <= P_max_loc,"Bornes sur les puissances installées")
     simplex.addConstraint(0 <= q1 <= h1,"Bornes sur le transfert Eolienne->Barrage")
     simplex.addConstraint(0 <= q2 <= h2,"Bornes sur le transfert Barrage->Production")
-    simplex.addConstraint(0 <= q3)
+    simplex.addConstraint(0 <= q3,"Bornes sur le transfert Eoliennes->Production")
     simplex.addConstraint(0 <= q4)
     simplex.addConstraint(0 <= q5)
     
@@ -334,6 +334,6 @@ def plotModel_Time(data):
     plt.show()
 
 def main():
-    model_3(0)
+    model_2()
     
 main()
