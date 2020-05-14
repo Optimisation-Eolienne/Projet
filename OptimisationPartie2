@@ -384,6 +384,8 @@ def model_1b(index_pays, theta=0.5):
 
 
 def main():
+    data = pd.DataFrame({'input_size':[1/12,2/12,3/12,4/12,5/12,6/12,7/12,8/12,9/12,10/12,11/12,12/12]
+    ,'primal_time':[1.656,2.046,4.796,],'dual_time':[1]})
     res = model_3(0, theta=0)
     #plotModel_Consommation(res,model=3)
     #plotModel_Barrage(res,model=1)
