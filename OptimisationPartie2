@@ -71,7 +71,7 @@ c = (cout_instal_offshore*is_offshore+cout_instal_onshore*(1-is_offshore))*N_ann
 L = np.matrix(np.tril(np.ones((m,m))))
 
 
-#| Données du modèles agrégé
+#| Données du modèle européen agrégé
 
 S_max = np.sum(stockage_hydro)
 h1 = np.sum(p_pompage)*T
