@@ -268,6 +268,9 @@ def model_5(theta=0.5):
     q4 = simplex.addVariable('q4',(N_pays,m)) # Centrale->Barrage
     q5 = simplex.addVariable('q5',(N_pays,m)) # Centrale->Production
     
+    #Contraintes global
+    simplex.addConstraint(0 <= P <= P_max,"Bornes sur les puissances installées")
+    
     for index in range(N_pays):
         add_pays_constraints(index, simplex, theta)
     
@@ -287,6 +290,27 @@ def add_pays_constraints(index_pays, simplex, theta=0.5):
     E = CyLPArray(consommation_par_periode[index_pays,:])
     
     S_0 = theta*S_max
+    
+    #Contraintes par pays
+    simplex.addConstraint(0 <= q1[index_pays] <= h1,"Bornes sur le transfert Eolienne->Barrage")
+    simplex.addConstraint(0 <= q2[index_pays] <= h2,"Bornes sur le transfert Barrage->Production")
+    simplex.addConstraint(0 <= q3[index_pays],"Bornes sur le transfert Eoliennes->Production")
+    simplex.addConstraint(0 <= q4[index_pays],"Bornes sur le transfert Centrale->Barrage")
+    simplex.addConstraint(0 <= q5[index_pays],"Bornes sur le transfert Centrale->Production")
+    
+    for i in range(m):
+        simplex.addConstraint(u[index_pays,i] - g[index_pays] <= 0)
+    simplex.addConstraint(0 <= u[i])
+    
+    
+    
+    simplex.addConstraint(-S_0 - R <= L*q1[index_pays] - L*q2[index_pays],"Capacité du barrage positive")
+    simplex.addConstraint(L*q1[index_pays] - L*q2[index_pays] <= S_max - S_0 - R,"Capacité maximale du barrage")
+    simplex.addConstraint(q1[index_pays] + q3[index_pays] - A2*P == 0,"Conservation de l'énergie produite par les éoliennes")
+    simplex.addConstraint(0 == T*u - q4 - q5, "contrainte sur flux des central")
+    simplex.addConstraint(E <= eta_turbinage*q2 + q3 + q5,"Demande d'énergie satisfaite")
+    simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
+
     
     
 def plotModel_Consommation(result,model):
