@@ -242,7 +242,7 @@ def model_4(index_pays,theta=0.5):
     simplex.addConstraint(-S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
     simplex.addConstraint(L*q1 - L*q2 <= S_max - S_0 - R,"Capacité maximale du barrage")
     simplex.addConstraint(q1 + q3 - A2*P == 0,"Conservation de l'énergie produite par les éoliennes")
-    simplex.addConstraint(q4 + q5 - u == 0)
+    simplex.addConstraint(q4 + q5 - T*u == 0)
     simplex.addConstraint(E <= eta_turbinage*q2 + q3 + q5,"Demande d'énergie satisfaite")
     simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
