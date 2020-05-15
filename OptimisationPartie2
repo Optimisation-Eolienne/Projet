@@ -218,7 +218,7 @@ def model_4(index_pays,theta=0.5):
     
     #Variables
     P = simplex.addVariable('P',N_sites2)
-    G = simplex.addVariable('g',1)
+    g = simplex.addVariable('g',1)
     u = simplex.addVariable('u',m)
     q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
     q2 = simplex.addVariable('q2',m) # Barrage->Production
