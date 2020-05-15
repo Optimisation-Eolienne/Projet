@@ -218,7 +218,7 @@ def model_4(index_pays,theta=0.5):
     
     #Variables
     P = simplex.addVariable('P',N_sites2)
-    G = simplex.addVariable('G',1)
+    G = simplex.addVariable('g',1)
     u = simplex.addVariable('u',m)
     q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
     q2 = simplex.addVariable('q2',m) # Barrage->Production
@@ -235,7 +235,7 @@ def model_4(index_pays,theta=0.5):
     simplex.addConstraint(0 <= q5,"Bornes sur le transfert Centrale->Production")
     
     for i in range(m):
-        simplex.addConstraint(u[i] - G <= 0)
+        simplex.addConstraint(u[i] - g <= 0)
     simplex.addConstraint(0 <= u)
     
     
@@ -247,7 +247,7 @@ def model_4(index_pays,theta=0.5):
     simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
     #Objectif
-    simplex.objective = c2*P + d1*G + d2*u.sum()
+    simplex.objective = c2*P + d1*g + d2*u.sum()
     
     simplex.primal()
     print(simplex.getStatusString())
