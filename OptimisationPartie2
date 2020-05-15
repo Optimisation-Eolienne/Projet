@@ -335,25 +335,36 @@ def plotModel_StockageInitial(theta_min,theta_max,theta_step):
     
     plt.show()
     
-def plotModel_Time(data):
+def plotModel_Time(data,model):
+    
     fig = plt.figure(figsize=(10,5))
     fig.suptitle("Temps d'exécution en fonction du nombre d'années considérées")
     fig.subplots_adjust(wspace=0.4,top=0.84)
-    g1 = fig.add_subplot(1,2,1)
-    g2 = fig.add_subplot(1,2,2)
     
-    g1.set_title("Algorithme du simplexe primal")
-    g1.set_xlabel("Période de résolution du modèle [année]")
-    g1.set_ylabel("Temps d'exécution [s]")
-    g1.set_ylim(top=500)
-    g1.scatter(data['input_size'],data['primal_time'])
+    if model!=2:
+        g1 = fig.add_subplot(1,2,1)
+        g2 = fig.add_subplot(1,2,2)
+        
+        g1.set_title("Algorithme du simplexe primal")
+        g1.set_xlabel("Période de résolution du modèle [année]")
+        g1.set_ylabel("Temps d'exécution [s]")
+        g1.set_ylim(top=500)
+        g1.scatter(data['input_size'],data['time1'])
+        
+        g2.set_title("Algorithme du simplexe dual")
+        g2.set_xlabel("Période de résolution du modèle [année]")
+        g2.set_ylabel("Temps d'exécution [s]")
+        g2.set_ylim(top=500)
+        g2.scatter(data['input_size'],data['time2'])
     
-    g2.set_title("Algorithme du simplexe dual")
-    g2.set_xlabel("Période de résolution du modèle [année]")
-    g2.set_ylabel("Temps d'exécution [s]")
-    g2.set_ylim(top=500)
-    g2.scatter(data['input_size'],data['dual_time'])
-    
+    if model==2:
+        g1 = fig.add_subplot(1,1,1)
+        
+        g1 = fig.set_title("Algorithme du branch and bound")
+        g1.set_xlabel("Période de résolution du modèle [année]")
+        g1.set_ylabel("Temps d'exécution [s]")
+        g1.scatter(data['input_size'],data['time1'])
+        
     plt.show()
 
 def main():
