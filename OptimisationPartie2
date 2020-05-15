@@ -219,7 +219,7 @@ def model_4(index_pays,theta=0.5):
     #Variables
     P = simplex.addVariable('P',N_sites2)
     g = simplex.addVariable('g',1)
-    u = simplex.addVariable('u',m)
+    u = simplex.addVariable('u',m) #Utilisation
     q1 = simplex.addVariable('q1',m) # Eoliennes->Barrage
     q2 = simplex.addVariable('q2',m) # Barrage->Production
     q3 = simplex.addVariable('q3',m) # Eoliennes->Production
@@ -239,10 +239,11 @@ def model_4(index_pays,theta=0.5):
     simplex.addConstraint(0 <= u)
     
     
+    
     simplex.addConstraint(-S_0 - R <= L*q1 - L*q2,"Capacité du barrage positive")
     simplex.addConstraint(L*q1 - L*q2 <= S_max - S_0 - R,"Capacité maximale du barrage")
     simplex.addConstraint(q1 + q3 - A2*P == 0,"Conservation de l'énergie produite par les éoliennes")
-    simplex.addConstraint(q4 + q5 - T*u == 0)
+    simplex.addConstraint(0 == T*u - q4 - q5, "contrainte sur flux des central")
     simplex.addConstraint(E <= eta_turbinage*q2 + q3 + q5,"Demande d'énergie satisfaite")
     simplex.addConstraint(q2.sum() - q1.sum() - q4.sum() == R[-1],"Stockage initial et final identique")
     
@@ -254,6 +255,40 @@ def model_4(index_pays,theta=0.5):
     
     return simplex.primalVariableSolution['u'],simplex.objectiveValue,simplex,theta,index_pays
 
+def model_5(theta=0.5):
+    simplex = CyClpSimplex()
+    
+    #Variables
+    P = simplex.addVariable('P',N_sites)
+    g = simplex.addVariable('g',N_pays)
+    u = simplex.addVariable('u',(N_pays,m)) #Utilisation
+    q1 = simplex.addVariable('q1',(N_pays,m)) # Eoliennes->Barrage
+    q2 = simplex.addVariable('q2',(N_pays,m)) # Barrage->Production
+    q3 = simplex.addVariable('q3',(N_pays,m)) # Eoliennes->Production
+    q4 = simplex.addVariable('q4',(N_pays,m)) # Centrale->Barrage
+    q5 = simplex.addVariable('q5',(N_pays,m)) # Centrale->Production
+    
+    for index in range(N_pays):
+        add_pays_constraints(index, simplex, theta)
+    
+    
+def add_pays_constraints(index_pays, simplex, theta=0.5):
+    #variables du pays
+    pays = liste_pays[index_pays]  
+    P_max2 = CyLPArray(pd.Series(P_max).loc[sites["pays"]==pays])
+    c2 = CyLPArray(pd.Series(c).loc[sites["pays"]==pays])
+    A2 = np.matrix(pd.DataFrame(A).loc[:,sites["pays"]==pays])
+    N_sites2 = len(P_max2)
+    
+    S_max = stockage_hydro[index_pays]
+    h1 = p_pompage[index_pays]*T
+    h2 = 1/eta_turbinage*p_turbinage[index_pays]*T
+    R = CyLPArray(np.transpose(apport_hydro_total[index_pays,:]))
+    E = CyLPArray(consommation_par_periode[index_pays,:])
+    
+    S_0 = theta*S_max
+    
+    
 def plotModel_Consommation(result,model):
     s = result[2]
     if model==1 or model==2:
@@ -368,8 +403,10 @@ def plotModel_Time(data,model):
     plt.show()
 
 def main():
-    result = model_4(1)
+    result = model_4(14)
     print(result[1])
+    print(result[0])
+    print(result[2].primalVariableSolution['g'])
     plotModel_Consommation(result,4)
     plotModel_Barrage(result,4)
     plotModel_StockageInitial(0,1,0.1)
